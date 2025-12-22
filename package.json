@@ -1,0 +1,24 @@
+{
+  "name": "policelocate",
+  "version": "1.0.0",
+  "description": "![Version](https://img.shields.io/badge/Version-v50.0-blue)\r ![License](https://img.shields.io/badge/License-Proprietary-red)",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lianghao02/PoliceLocate.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/lianghao02/PoliceLocate/issues"
+  },
+  "homepage": "https://github.com/lianghao02/PoliceLocate#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}
