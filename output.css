@@ -554,6 +554,41 @@ video {
   display: none;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+       text-size-adjust: 100%;
+  font-family: Inter, "Noto Sans TC", sans-serif;
+}
+
+button,
+  input:where([type='button']),
+  input:where([type='reset']),
+  input:where([type='submit']) {
+  -webkit-appearance: button;
+     -moz-appearance: button;
+          appearance: button;
+}
+
+[type='search'] {
+  -webkit-appearance: textfield;
+     -moz-appearance: textfield;
+          appearance: textfield;
+}
+
+/* 解決 display: block 與 vertical-align: middle 的衝突警告 */
+
+img,
+  svg,
+  video,
+  canvas,
+  audio,
+  iframe,
+  embed,
+  object {
+  vertical-align: baseline;
+}
+
 .container {
   width: 100%;
 }
