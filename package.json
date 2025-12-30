@@ -2,9 +2,11 @@
   "name": "policelocate",
   "version": "1.0.0",
   "description": "![Version](https://img.shields.io/badge/Version-v50.0-blue)\r ![License](https://img.shields.io/badge/License-Proprietary-red)",
-  "main": "script.js",
+  "main": "src/script.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tailwindcss -i ./src/input.css -o ./output.css --watch",
+    "build": "tailwindcss -i ./src/input.css -o ./output.css --minify"
   },
   "repository": {
     "type": "git",
