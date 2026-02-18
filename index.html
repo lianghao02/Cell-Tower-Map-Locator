@@ -11,9 +11,9 @@
     <meta name="format-detection" content="telephone=no">
     <meta name="description" content="警用定位輔助工具，協助快速定位與查詢。">
     <meta name="author" content="LiangHao">
-    <title>警用定位助手 | LiangHao Dev</title>
+    <title>手機門號即時定位 | LiangHao Dev</title>
     <!-- <link rel="icon" type="image/png" href="favicon.png"> -->
-    <meta property="og:title" content="警用定位助手 | LiangHao Dev">
+    <meta property="og:title" content="手機門號即時定位 | LiangHao Dev">
     <meta property="og:description" content="警用定位輔助工具，協助快速定位與查詢。">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://lianghao02.github.io/PoliceLocate/">
@@ -108,10 +108,10 @@
         <!-- 標題區塊 (統一風格) -->
         <div class="text-center mb-8 relative">
             <h1 class="text-3xl font-bold text-primary mb-2.5 flex justify-center items-center">
-                <i class="fa-solid fa-user-shield mr-3"></i>警用定位助手
+                <i class="fa-solid fa-user-shield mr-3"></i>手機門號即時定位
             </h1>
             <div class="flex justify-center items-center gap-3 text-[#7f8c8d] text-sm font-medium">
-                <span>PRO v50.0 | 正式發布版</span>
+                <span>V1.0</span>
                 <button id="btnToggleConfig"
                     class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 flex items-center"
                     title="進階設定">
@@ -341,8 +341,8 @@
                 </div>
 
                 <div class="footer text-center mt-[30px] text-[0.75rem] text-[#bdc3c7]">
-                    System initialized. Version 50.0 Stable<br>
-                    &copy; 2025 Police Locate Tool. All rights reserved.
+                    System initialized. Version 1.0<br>
+                    &copy; 2026 Cell Phone Locator. All rights reserved.
                 </div>
             </div>
         </div>
@@ -356,9 +356,9 @@
         };
 
         /**
-         * 警用定位助手 v50.0 (正式發布版)
-         * 已封裝邏輯以確保安全與效能。
-         */
+     * 手機門號即時定位 v1.0
+     * 已封裝邏輯以確保安全與效能。
+     */
         const app = (function () {
             // 私有變數
             let map, marker, sector;
@@ -374,7 +374,7 @@
             let history = [];
 
             // --- 參數解耦配置 (Config) ---
-            const STORAGE_KEY = "police_locate_v50_config";
+            const STORAGE_KEY = "cell_locate_v1_config";
             const DEFAULT_CONFIG = {
                 sectorRadius: 300,      // 扇形半徑 (米)
                 sectorApperture: 60,    // 扇形夾角 (度)
@@ -388,7 +388,7 @@
             };
             let config = { ...DEFAULT_CONFIG };
 
-            const HISTORY_STORAGE_KEY = "police_locate_v50_db";
+            const HISTORY_STORAGE_KEY = "cell_locate_v1_db";
 
             // 初始化
             function init() {

@@ -1,9 +1,9 @@
-# 👮‍♂️ Police Locate Helper (警用定位助手)
+# 📱 Cell Phone Locator (手機門號即時定位)
 
-![Version](https://img.shields.io/badge/Version-v50.0-blue)
+![Version](https://img.shields.io/badge/Version-v1.0-blue)
 ![License](https://img.shields.io/badge/License-Proprietary-red)
 
-這是一個專為警務人員設計的輔助工具，能快速解析電信查詢回傳的雜亂文字，自動提取關鍵資訊（座標、時間、門號）並進行地圖定位與導航。
+這是一個專為手機門號即時定位設計的輔助工具，能快速解析電信查詢回傳的雜亂文字，自動提取關鍵資訊（座標、時間、門號）並進行地圖定位與導航。
 
 ---
 
