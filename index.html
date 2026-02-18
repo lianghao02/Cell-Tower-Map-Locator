@@ -650,8 +650,8 @@
 
             // 產生應用程式分享連結
             function getAppLink() {
-                // 固定使用此 Github Pages 網址，確保他人可開啟
-                const baseUrl = "https://lianghao02.github.io/PoliceLocate/";
+                // 固定使用此 Github Pages 網址 (需配合 Repository 名稱)
+                const baseUrl = "https://lianghao02.github.io/Cell-Tower-Map-Locator/";
                 const params = new URLSearchParams();
                 if (data.lat) params.append('lat', data.lat);
                 if (data.lng) params.append('lng', data.lng);
