@@ -797,7 +797,7 @@
             }
 
             function saveHistory() {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
                 renderHistory();
             }
 
@@ -872,7 +872,12 @@
                             saveConfig();
                             const display = document.getElementById(id + '-val');
                             if (display) display.innerText = val;
+                            // Update map to reflect changes live
+                            if (data.lat && data.lng) {
+                                updateMap(false);
+                            }
                         };
+
                     }
                 }
 
