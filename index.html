@@ -16,7 +16,7 @@
     <meta property="og:title" content="手機門號即時定位 | LiangHao Dev">
     <meta property="og:description" content="警用定位輔助工具，協助快速定位與查詢。">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://lianghao02.github.io/PoliceLocate/">
+    <meta property="og:url" content="https://lianghao02.github.io/Cell-Tower-Map-Locator/">
 
     <!-- 外部資源使用 CDN，確保載入速度 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -255,7 +255,7 @@
                                 class="fa-solid fa-mobile-screen"></i> 門號</label>
                         <input type="tel" id="phone"
                             class="phone-input w-full border-2 border-[#3498db] rounded-xl p-3 text-base font-mono bg-[#fafafa] text-[#2980b9] font-bold focus:border-accent focus:bg-white focus:outline-none"
-                            placeholder="09xxxxxxxx" readonly onclick="this.removeAttribute('readonly')">
+                            placeholder="09xxxxxxxx">
                     </div>
                     <div class="input-group">
                         <label class="block font-bold text-primary mb-[6px] text-[0.9rem]"><i
@@ -349,9 +349,9 @@
     </div>
 
     <script>
-        // 全域錯誤攔截 (用於除錯)
+        // 全域錯誤攔截 (記錄至主控台，避免向使用者洩漏技術細節)
         window.onerror = function (msg, url, lineNo, columnNo, error) {
-            alert("系統錯誤: " + msg + "\nLine: " + lineNo);
+            console.error(`[AppError] ${msg} (Line: ${lineNo})`, error);
             return false;
         };
 
@@ -373,11 +373,19 @@
             };
             let history = [];
 
+            // HTML 特殊字元轉義 (防 XSS)
+            function esc(str) {
+                if (str == null) return '';
+                return String(str)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
             // --- 參數解耦配置 (Config) ---
             const STORAGE_KEY = "cell_locate_v1_config";
             const DEFAULT_CONFIG = {
                 sectorRadius: 300,      // 扇形半徑 (米)
-                sectorApperture: 60,    // 扇形夾角 (度)
+                sectorAperture: 60,     // 扇形夾角 (度)
                 defaultZoom: 16,        // 預設縮放層級
                 historyLimit: 50,       // 歷史紀錄上限
                 mapTileUrl: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -405,6 +413,7 @@
                     });
 
                     syncConfigToUI();
+                    initDrawer(); // 側邊抽屜事件只綁定一次
 
                     // 檢查網址參數 (分享連結開啟)
                     checkUrlParams();
@@ -535,7 +544,7 @@
                     }
                 }
 
-                if (data.lat && data.lng) {
+                if (data.lat !== null && data.lng !== null) {
                     syncUI();
                     updateMap(true); // true = 存入歷史
                 } else {
@@ -587,10 +596,10 @@
                 if (!map) {
                     map = L.map("map").setView([data.lat, data.lng], config.defaultZoom);
                     L.tileLayer(config.mapTileUrl, {
-                        attribution: "&copy; OSM",
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     }).addTo(map);
                 } else {
-                    map.setView([data.lat, data.lng], config.defaultZoom);
+                    map.panTo([data.lat, data.lng]); // 保留使用者縮放層級
                     // 確保地圖正確重繪 (需等待容器顯示後)
                     setTimeout(() => map.invalidateSize(), 100);
                 }
@@ -613,7 +622,7 @@
                 // 繪製扇形 (若有方位角)
                 if (data.azi !== null) {
                     const r = config.sectorRadius; // 半徑 (米)
-                    const halfApp = config.sectorApperture / 2;
+                    const halfApp = config.sectorAperture / 2;
                     const startAngle = (data.azi - halfApp) * (Math.PI / 180);
                     const endAngle = (data.azi + halfApp) * (Math.PI / 180);
                     const points = [[data.lat, data.lng]];
@@ -640,7 +649,7 @@
             }
 
             function openMap() {
-                if (data.lat)
+                if (data.lat !== null && data.lng !== null)
                     window.open(
                         `https://www.google.com/maps?q=${data.lat},${data.lng}`,
                         "_blank"
@@ -653,9 +662,9 @@
                 // 固定使用此 Github Pages 網址 (需配合 Repository 名稱)
                 const baseUrl = "https://lianghao02.github.io/Cell-Tower-Map-Locator/";
                 const params = new URLSearchParams();
-                if (data.lat) params.append('lat', data.lat);
-                if (data.lng) params.append('lng', data.lng);
-                if (data.azi) params.append('azi', data.azi);
+                if (data.lat !== null) params.append('lat', data.lat);
+                if (data.lng !== null) params.append('lng', data.lng);
+                if (data.azi !== null) params.append('azi', data.azi); // 修正：azi=0 也需帶入
                 if (data.phone) params.append('phone', data.phone);
                 if (data.reqTime) params.append('reqTime', data.reqTime);
                 if (data.regTime) params.append('regTime', data.regTime);
@@ -672,7 +681,7 @@
                 if (data.reqTime) t += `定位時間: ${data.reqTime}\n`;
                 if (data.regTime) t += `註冊時間: ${data.regTime}\n`;
                 t += `定位經緯度: ${data.lat}, ${data.lng}`;
-                if (data.azi) t += ` (方位:${data.azi})`;
+                if (data.azi !== null) t += ` (方位:${data.azi})`; // 修正：azi=0 不應被忽略
 
                 // 加上專用連結
                 t += `\n\n📌 專用圖台 (含扇形):\n${appUrl}`;
@@ -681,7 +690,7 @@
             }
 
             function copy() {
-                if (!data.lat) return alert("無座標");
+                if (data.lat === null) return alert("無座標");
                 const t = getFullText();
 
                 if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -698,17 +707,24 @@
             }
 
             function fallbackCopy(text) {
-                const ta = document.createElement("textarea");
-                ta.value = text;
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand("copy");
-                document.body.removeChild(ta);
-                alert("✅ 資訊已複製");
+                // 嘗試使用 execCommand (legacy)，若失敗則提示手動複製
+                try {
+                    const ta = document.createElement("textarea");
+                    ta.value = text;
+                    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    const ok = document.execCommand("copy");
+                    document.body.removeChild(ta);
+                    if (ok) { alert("✅ 資訊已複製"); }
+                    else { prompt("請手動複製以下內容 (Ctrl+A → Ctrl+C):", text); }
+                } catch (e) {
+                    prompt("請手動複製以下內容 (Ctrl+A → Ctrl+C):", text);
+                }
             }
 
             function share(type) {
-                if (!data.lat) return alert("無座標");
+                if (data.lat === null) return alert("無座標");
                 const t = getFullText();
                 const mapUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`; // 用於 Telegram 按鈕連結
 
@@ -811,30 +827,27 @@
 
                 history.forEach((item) => {
                     const li = document.createElement("li");
-                    // 使用 Tailwind 樣式
                     li.className =
                         "bg-white rounded-xl p-[15px] mb-[10px] shadow-[0_2px_5px_rgba(0,0,0,0.03)] border border-[#eee] relative cursor-pointer hover:bg-[#f8f9fa] hover:border-accent transition-colors";
+                    // 使用 esc() 對使用者輸入資料做 HTML 轉義 (防 XSS)
                     li.innerHTML = `
-                    <div class="text-[0.8rem] text-[#999] mb-[4px]">${item.time
-                        }</div>
+                    <div class="text-[0.8rem] text-[#999] mb-[4px]">${esc(item.time)}</div>
                     <div class="flex items-center gap-[8px] mb-[4px]">
-                        <span class="font-bold text-primary text-[1.05rem]">${item.lat
-                        }, ${item.lng}</span>
+                        <span class="font-bold text-primary text-[1.05rem]">${item.lat}, ${item.lng}</span>
                         ${item.phone
-                            ? `<span class="tag text-[0.8rem] py-[2px] px-[6px] rounded bg-[#e3f2fd] text-[#2980b9]">${item.phone}</span>`
+                            ? `<span class="tag text-[0.8rem] py-[2px] px-[6px] rounded bg-[#e3f2fd] text-[#2980b9]">${esc(item.phone)}</span>`
                             : ""
                         }
                     </div>
                     ${item.reqTime
-                            ? `<div class="text-[0.85rem] text-[#555]">🕒 ${item.reqTime}</div>`
+                            ? `<div class="text-[0.85rem] text-[#555]">🕒 ${esc(item.reqTime)}</div>`
                             : ""
                         }
-                    ${item.azi
+                    ${item.azi !== null && item.azi !== undefined
                             ? `<div class="text-[0.85rem] text-[#d35400]">🧭 方位: ${item.azi}°</div>`
                             : ""
                         }
-                    <i class="fa-solid fa-xmark del-icon absolute top-[15px] right-[15px] text-del p-[5px] hover:scale-110 transition-transform" onclick="app.deleteItem(${item.id
-                        }, event)"></i>
+                    <i class="fa-solid fa-xmark del-icon absolute top-[15px] right-[15px] text-del p-[5px] hover:scale-110 transition-transform" onclick="app.deleteItem(${item.id}, event)"></i>
                 `;
                     li.onclick = () => {
                         data = {
@@ -853,45 +866,43 @@
             }
 
 
-            // --- 設定面板互動邏輯 (側邊抽屜控制) ---
+            // --- 設定面板：同步 config 值至 UI 滑桿 ---
             function syncConfigToUI() {
                 const inputs = {
-                    'cfg-radius': 'sectorRadius',
-                    'cfg-aperture': 'sectorApperture',
-                    'cfg-zoom': 'defaultZoom',
+                    'cfg-radius':        'sectorRadius',
+                    'cfg-aperture':      'sectorAperture', // 修正拼字
+                    'cfg-zoom':          'defaultZoom',
                     'cfg-history-limit': 'historyLimit'
                 };
 
-                for (let id in inputs) {
+                for (const id in inputs) {
+                    const key = inputs[id];
                     const el = document.getElementById(id);
-                    if (el) {
-                        el.value = config[inputs[id]];
-                        el.oninput = (e) => {
-                            let val = parseFloat(e.target.value);
-                            config[inputs[id]] = val;
-                            saveConfig();
-                            const display = document.getElementById(id + '-val');
-                            if (display) display.innerText = val;
-                            // Update map to reflect changes live
-                            if (data.lat && data.lng) {
-                                updateMap(false);
-                            }
-                        };
-
-                    }
+                    if (!el) continue;
+                    el.value = config[key];
+                    el.oninput = (e) => {
+                        const val = parseFloat(e.target.value);
+                        config[key] = val;
+                        saveConfig();
+                        const display = document.getElementById(id + '-val');
+                        if (display) display.innerText = val;
+                        if (data.lat !== null && data.lng !== null) updateMap(false);
+                    };
                 }
+            }
 
-                // --- 側邊抽屜控制邏輯 ---
+            // --- 側邊抽屜事件綁定 (僅在 init 時呼叫一次，避免重複綁定) ---
+            function initDrawer() {
                 const btnToggle = document.getElementById('btnToggleConfig');
-                const btnClose = document.getElementById('btnCloseConfig');
-                const panel = document.getElementById('configPanel');
-                const overlay = document.getElementById('configOverlay');
+                const btnClose  = document.getElementById('btnCloseConfig');
+                const panel     = document.getElementById('configPanel');
+                const overlay   = document.getElementById('configOverlay');
+                const btnReset  = document.getElementById('btnResetConfig');
 
                 const toggleDrawer = (isOpen) => {
                     if (isOpen) {
                         overlay.classList.remove('hidden');
-                        // 強制重繪以觸發動畫
-                        void overlay.offsetWidth;
+                        void overlay.offsetWidth; // 強制重繪以觸發過渡動畫
                         overlay.classList.add('opacity-100');
                         panel.setAttribute('data-open', 'true');
                         document.body.style.overflow = 'hidden';
@@ -900,36 +911,21 @@
                         panel.removeAttribute('data-open');
                         document.body.style.overflow = '';
                         setTimeout(() => {
-                            if (!panel.hasAttribute('data-open')) {
-                                overlay.classList.add('hidden');
-                            }
+                            if (!panel.hasAttribute('data-open')) overlay.classList.add('hidden');
                         }, 300);
                     }
                 };
 
-                if (btnToggle) {
-                    btnToggle.onclick = (e) => {
-                        e.preventDefault();
-                        toggleDrawer(true);
-                    };
-                }
+                if (btnToggle) btnToggle.onclick = (e) => { e.preventDefault(); toggleDrawer(true); };
+                if (btnClose)  btnClose.onclick  = () => toggleDrawer(false);
+                if (overlay)   overlay.onclick   = () => toggleDrawer(false);
 
-                if (btnClose) {
-                    btnClose.onclick = () => toggleDrawer(false);
-                }
-
-                if (overlay) {
-                    overlay.onclick = () => toggleDrawer(false);
-                }
-
-                // 恢復預設值
-                const btnReset = document.getElementById('btnResetConfig');
                 if (btnReset) {
                     btnReset.onclick = () => {
                         if (confirm("確定要恢復所有進階設定為預設值嗎？")) {
                             config = { ...DEFAULT_CONFIG };
                             saveConfig();
-                            syncConfigToUI();
+                            syncConfigToUI(); // 只更新滑桿值，不重新綁定抽屜事件
                         }
                     };
                 }
@@ -951,11 +947,7 @@
         })();
 
         // 啟動
-        if (typeof app !== "undefined") {
-            window.onload = app.init;
-        } else {
-            alert("嚴重錯誤：程式初始化失敗，請檢查瀏覽器控制台。");
-        }
+        window.onload = app.init;
     </script>
 </body>
 
