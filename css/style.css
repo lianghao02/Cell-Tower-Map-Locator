@@ -1,0 +1,4 @@
+        /* Leaflet Map Fix */
+        #map {
+            z-index: 1;
+        }
