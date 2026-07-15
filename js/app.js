@@ -24,6 +24,7 @@
                 addrName: "",
                 addrLat: null,
                 addrLng: null,
+                searchQuery: "",
             };
             let history = [];
 
@@ -72,6 +73,19 @@
                     // 檢查網址參數 (分享連結開啟)
                     checkUrlParams();
 
+                    // 初始化智慧分頁導航
+                    const params = new URLSearchParams(window.location.search);
+                    if (params.has('lat') && params.has('lng')) {
+                        if (params.has('addrLat') && params.has('addrLng')) {
+                            switchTab('compare');
+                        } else {
+                            switchTab('base');
+                        }
+                    } else {
+                        switchTab('parse');
+                        updateMap(false, "base"); // 乾淨開屏時，強制初始化台灣地圖背景，避免白茫茫一片
+                    }
+
                 } catch (e) {
                     console.error("Init error:", e);
                 }
@@ -104,7 +118,8 @@
 
                 if (hasData) {
                     syncUI();
-                    updateMap(false); // 不自動存入歷史，避免污染
+                    const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
+                    updateMap(false, focusType); // 不自動存入歷史，避免污染
                 }
             }
 
@@ -215,7 +230,8 @@
                     data.addrLat = null;
                     data.addrLng = null;
                     syncUI();
-                    updateMap(true); // true = 存入歷史
+                    updateMap(true, "base"); // true = 存入歷史
+                    switchTab('base'); // 自動切換至定位資料分頁
                 } else {
                     alert("找不到有效的台灣座標數值，請確認內容。");
                 }
@@ -245,7 +261,7 @@
                     data.addrLng = isNaN(addrLngVal) ? null : addrLngVal;
                     data.addrName = addrNameVal || "";
                     
-                    updateMap(save);
+                    updateMap(save, "base");
                 }
             }
 
@@ -260,7 +276,12 @@
 
                 document.getElementById("addrLat").value = data.addrLat !== null ? data.addrLat : "";
                 document.getElementById("addrLng").value = data.addrLng !== null ? data.addrLng : "";
-                document.getElementById("targetAddr").value = data.addrName;
+                
+                // 只有當輸入框無內容時才以解析名稱覆蓋；保留使用者打字，防止同名地名直接覆蓋使用者輸入
+                const addrInput = document.getElementById("targetAddr");
+                if (addrInput && (!addrInput.value.trim() || data.addrName === "")) {
+                    addrInput.value = data.addrName;
+                }
             }
 
             // 計算航向角（相對方位角）
@@ -289,6 +310,8 @@
             function locateAddress() {
                 let addr = document.getElementById("targetAddr").value.trim();
                 if (!addr) return alert("請先輸入要定位的地址！");
+                
+                data.searchQuery = addr; // 保存使用者輸入的原始查詢字詞
                 
                 // 智慧模糊容錯 A：簡繁體轉譯
                 addr = addr.replace(/台/g, "臺");
@@ -320,8 +343,19 @@
                         data.addrLat = parseFloat(parseFloat(result.lat).toFixed(6));
                         data.addrLng = parseFloat(parseFloat(result.lon).toFixed(6));
                         
-                        // 擷取簡化地名 (避免過長)
-                        data.addrName = result.display_name.split(',')[0] || addr;
+                        // 智慧擷取地名描述，自動提取縣市、市區鄉鎮與地標名，防止同名誤判
+                        const parts = result.display_name.split(',').map(p => p.trim());
+                        let formattedName = parts[0];
+                        if (parts.length > 2) {
+                            const county = parts.find(p => p.endsWith("市") || p.endsWith("縣"));
+                            const town = parts.find(p => p.endsWith("區") || p.endsWith("鄉") || p.endsWith("鎮") || p.endsWith("市") && p !== county);
+                            if (county && town) {
+                                formattedName = `${county}${town} ${parts[0]}`;
+                            } else if (county) {
+                                formattedName = `${county} ${parts[0]}`;
+                            }
+                        }
+                        data.addrName = formattedName;
                         
                         syncUI();
                         updateMap(false);
@@ -342,6 +376,7 @@
                 data.addrLat = null;
                 data.addrLng = null;
                 data.addrName = "";
+                data.searchQuery = "";
                 
                 syncUI();
                 
@@ -391,7 +426,7 @@
             }
 
             // 更新地圖與歷史紀錄
-            function updateMap(save) {
+            function updateMap(save, focusType) {
                 const mapDiv = document.getElementById("map");
                 const mapContainer = document.getElementById("map-container");
 
@@ -399,9 +434,29 @@
                 mapDiv.classList.remove("hidden");
                 if (mapContainer) mapContainer.classList.remove("hidden");
 
+                const hasBase = data.lat !== null && data.lng !== null;
+                const hasAddr = data.addrLat !== null && data.addrLng !== null;
+
+                // 智慧判定地圖初始化時的預設中心點與 Zoom
+                let centerLat = 23.6978; // 預設台灣中心
+                let centerLng = 120.9605;
+                let defaultZoom = 8;     // 台灣全圖縮放
+
+                if (hasBase) {
+                    centerLat = data.lat;
+                    centerLng = data.lng;
+                    defaultZoom = config.defaultZoom;
+                } else if (hasAddr) {
+                    centerLat = data.addrLat;
+                    centerLng = data.addrLng;
+                    defaultZoom = config.defaultZoom;
+                }
+
                 if (!map) {
-                    map = L.map("map").setView([data.lat, data.lng], config.defaultZoom);
+                    map = L.map("map", { maxZoom: 22 }).setView([centerLat, centerLng], defaultZoom);
                     L.tileLayer(config.mapTileUrl, {
+                        maxZoom: 22,
+                        maxNativeZoom: 19, // OSM 最大原生瓦片級數為 19 級，超過 19 級時由 Leaflet 進行插值放大以防破圖
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     }).addTo(map);
 
@@ -412,73 +467,87 @@
                         data.addrLat = parseFloat(e.latlng.lat.toFixed(6));
                         data.addrLng = parseFloat(e.latlng.lng.toFixed(6));
                         data.addrName = "地圖自訂點";
+                        data.searchQuery = ""; // 地圖自訂點，清除查詢詞檢驗
                         
                         toggleMapSelect(null, false);
                         syncUI();
-                        updateMap(false);
+                        updateMap(false, "addr");
+                        switchTab('compare'); // 自動切換至空間對比分頁
                     });
                 } else {
-                    map.panTo([data.lat, data.lng]); // 保留使用者縮放層級
-                    // 確保地圖正確重繪 (需等待容器顯示後)
-                    setTimeout(() => map.invalidateSize(), 100);
+                    // 若無特別指定對焦，只做尺寸刷新，避免干擾使用者拖曳與平移視角
+                    if (!focusType) {
+                        setTimeout(() => map.invalidateSize(), 100);
+                    }
                 }
 
+                // 實施智慧 Pan & Zoom 對焦引擎
+                if (map && focusType) {
+                    if (focusType === "base" && hasBase) {
+                        map.setView([data.lat, data.lng], 18);
+                    } else if (focusType === "addr" && hasAddr) {
+                        map.setView([data.addrLat, data.addrLng], 18);
+                    } else if (focusType === "bounds" && hasBase && hasAddr) {
+                        const bounds = L.latLngBounds([[data.lat, data.lng], [data.addrLat, data.addrLng]]);
+                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                    } else {
+                        // 兜底對焦
+                        map.setView([centerLat, centerLng], (hasBase || hasAddr) ? 18 : 8);
+                    }
+                }
+
+                // --- 1. 繪製基地台 Marker ---
                 if (marker) map.removeLayer(marker);
                 if (sector) map.removeLayer(sector);
 
-                // 地圖 Popup 顯示內容
-                let desc = `<b>📍 基地台定位點</b><br>${data.lat}, ${data.lng}`;
-                if (data.phone) desc += `<br>定位門號: ${data.phone}`;
-                if (data.reqTime) desc += `<br>🕒 請求: ${data.reqTime}`;
-                if (data.regTime) desc += `<br>📡 註冊: ${data.regTime}`;
-                if (data.azi !== null) desc += `<br>🧭 方位: ${data.azi}°`;
+                if (hasBase) {
+                    let desc = `<b>📍 基地台定位點</b><br>${data.lat}, ${data.lng}`;
+                    if (data.phone) desc += `<br>定位門號: ${data.phone}`;
+                    if (data.reqTime) desc += `<br>🕒 請求: ${data.reqTime}`;
+                    if (data.regTime) desc += `<br>📡 註冊: ${data.regTime}`;
+                    if (data.azi !== null) desc += `<br>🧭 方位: ${data.azi}°`;
 
-                marker = L.marker([data.lat, data.lng])
-                    .addTo(map)
-                    .bindPopup(desc)
-                    .openPopup();
+                    marker = L.marker([data.lat, data.lng])
+                        .addTo(map)
+                        .bindPopup(desc)
+                        .openPopup();
 
-                // 繪製扇形 (若有方位角)
-                if (data.azi !== null) {
-                    const r = config.sectorRadius; // 半徑 (米)
-                    const halfApp = config.sectorAperture / 2;
-                    const startAngle = (data.azi - halfApp) * (Math.PI / 180);
-                    const endAngle = (data.azi + halfApp) * (Math.PI / 180);
-                    const points = [[data.lat, data.lng]];
+                    // 繪製發射方位扇形
+                    if (data.azi !== null) {
+                        const r = config.sectorRadius; // 半徑 (米)
+                        const halfApp = config.sectorAperture / 2;
+                        const startAngle = (data.azi - halfApp) * (Math.PI / 180);
+                        const endAngle = (data.azi + halfApp) * (Math.PI / 180);
+                        const points = [[data.lat, data.lng]];
 
-                    for (let i = 0; i <= 20; i++) {
-                        const angle = startAngle + (endAngle - startAngle) * (i / 20);
-                        // 簡易經緯度換算
-                        const dLat = (r / 111320) * Math.cos(angle);
-                        const dLng =
-                            (r / (111320 * Math.cos(data.lat * (Math.PI / 180)))) *
-                            Math.sin(angle);
-                        points.push([data.lat + dLat, data.lng + dLng]);
+                        for (let i = 0; i <= 20; i++) {
+                            const angle = startAngle + (endAngle - startAngle) * (i / 20);
+                            const dLat = (r / 111320) * Math.cos(angle);
+                            const dLng = (r / (111320 * Math.cos(data.lat * (Math.PI / 180)))) * Math.sin(angle);
+                            points.push([data.lat + dLat, data.lng + dLng]);
+                        }
+                        points.push([data.lat, data.lng]);
+
+                        sector = L.polygon(points, {
+                            color: "red",
+                            fillOpacity: 0.1,
+                            weight: 1,
+                        }).addTo(map);
                     }
-                    points.push([data.lat, data.lng]);
-
-                    sector = L.polygon(points, {
-                        color: "red",
-                        fillOpacity: 0.1,
-                        weight: 1,
-                    }).addTo(map);
                 }
 
-                // --- 目標地址 / 位置關聯繪製 ---
+                // --- 2. 繪製目標位置 Marker ---
                 if (addrMarker) map.removeLayer(addrMarker);
                 if (relationLine) map.removeLayer(relationLine);
 
-                const hasAddr = data.addrLat !== null && data.addrLng !== null;
                 const analysisPanel = document.getElementById("analysisPanel");
 
                 if (hasAddr) {
-                    // 1. 建立目標地址標記 (🏠 Pin)
                     addrMarker = L.marker([data.addrLat, data.addrLng], {
                         draggable: true,
                         title: data.addrName || "目標位置"
                     }).addTo(map);
 
-                    // 綁定拖曳結束事件
                     addrMarker.on("dragend", function (e) {
                         const latlng = e.target.getLatLng();
                         data.addrLat = parseFloat(latlng.lat.toFixed(6));
@@ -490,66 +559,131 @@
                         updateMap(false);
                     });
 
-                    // 2. 計算距離與相對方位角
-                    const dist = Math.round(map.distance([data.lat, data.lng], [data.addrLat, data.addrLng]));
-                    const bearing = Math.round(calculateBearing(data.lat, data.lng, data.addrLat, data.addrLng));
-
-                    // 3. 判斷是否在發射扇形範圍內
-                    let isCovered = false;
-                    let coveredText = "⚠️ 未提供發射方位角";
-                    let coveredClass = "text-slate-500";
-                    let lineColor = "#64748b"; // 預設灰藍色
-
-                    if (data.azi !== null) {
-                        isCovered = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
-                        if (isCovered) {
-                            coveredText = "🎯 位於發射扇形內";
-                            coveredClass = "text-emerald-600";
-                            lineColor = "#10b981"; // 翠綠色
-                        } else {
-                            coveredText = "❌ 位於發射扇形外";
-                            coveredClass = "text-rose-600";
-                            lineColor = "#ef4444"; // 亮紅色
-                        }
-                    }
-
-                    // 4. 繪製虛線連線與動態 Tooltip
-                    relationLine = L.polyline([[data.lat, data.lng], [data.addrLat, data.addrLng]], {
-                        color: lineColor,
-                        weight: 2,
-                        dashArray: "6, 6"
-                    }).addTo(map);
-
-                    const tooltipContent = `📏 ${dist}公尺 / 🧭 方位:${bearing}°<br>${isCovered ? "🎯 覆蓋區內" : "❌ 覆蓋區外"}`;
-                    relationLine.bindTooltip(tooltipContent, {
-                        permanent: true,
-                        direction: "center",
-                        className: "relation-tooltip text-xs font-bold px-2 py-1 rounded shadow border-none bg-white/95 text-slate-800"
-                    }).openTooltip();
-
-                    // 5. 更新 Popup
                     let addrDesc = `<b>🏠 目標地址 / 位置</b><br>${data.addrName || "自訂位置"}<br>${data.addrLat}, ${data.addrLng}`;
-                    addrMarker.bindPopup(addrDesc).openPopup();
-
-                    // 7. 智慧視野自動調焦 (僅在載入新定位時觸發，拖拽微調時不干擾)
-                    if (save) {
-                        const bounds = L.latLngBounds([[data.lat, data.lng], [data.addrLat, data.addrLng]]);
-                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                    addrMarker.bindPopup(addrDesc);
+                    if (!hasBase) {
+                        addrMarker.openPopup();
                     }
 
-                    // 8. 更新空間關聯分析 UI 面板
-                    if (analysisPanel) {
-                        analysisPanel.classList.remove("hidden");
-                        document.getElementById("analysisDistance").innerText = `${dist} 公尺`;
-                        document.getElementById("analysisBearing").innerText = `${bearing}°`;
-                        
-                        const covEl = document.getElementById("analysisCoverage");
-                        covEl.className = "font-bold " + coveredClass;
-                        covEl.innerText = coveredText;
+                    // --- 3. 繪製兩者關聯 (只有兩者皆定位時才繪製) ---
+                    if (hasBase) {
+                        const dist = Math.round(map.distance([data.lat, data.lng], [data.addrLat, data.addrLng]));
+                        const bearing = Math.round(calculateBearing(data.lat, data.lng, data.addrLat, data.addrLng));
+
+                        let isCovered = false;
+                        let coveredText = "⚠️ 未提供發射方位角";
+                        let coveredClass = "text-slate-500";
+                        let lineColor = "#64748b";
+
+                        if (data.azi !== null) {
+                            isCovered = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
+                            if (isCovered) {
+                                coveredText = "🎯 位於發射扇形內";
+                                coveredClass = "text-emerald-600";
+                                lineColor = "#10b981";
+                            } else {
+                                coveredText = "❌ 位於發射扇形外";
+                                coveredClass = "text-rose-600";
+                                lineColor = "#ef4444";
+                            }
+                        }
+
+                        relationLine = L.polyline([[data.lat, data.lng], [data.addrLat, data.addrLng]], {
+                            color: lineColor,
+                            weight: 2,
+                            dashArray: "6, 6"
+                        }).addTo(map);
+
+                        const tooltipContent = `📏 ${dist}公尺 / 🧭 方位:${bearing}°<br>${isCovered ? "🎯 覆蓋區內" : "❌ 覆蓋區外"}`;
+                        relationLine.bindTooltip(tooltipContent, {
+                            permanent: true,
+                            direction: "center",
+                            className: "relation-tooltip text-xs font-bold px-2 py-1 rounded shadow border-none bg-white/95 text-slate-800"
+                        }).openTooltip();
+
+                        addrMarker.openPopup();
+
+                        if (save) {
+                            const bounds = L.latLngBounds([[data.lat, data.lng], [data.addrLat, data.addrLng]]);
+                            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                        }
+
+                        // 更新空間關聯分析 UI 面板
+                        if (analysisPanel) {
+                            analysisPanel.classList.remove("hidden");
+                            document.getElementById("analysisDistance").innerText = `${dist} 公尺`;
+                            document.getElementById("analysisBearing").innerText = `${bearing}°`;
+                            
+                            const nameEl = document.getElementById("analysisResultName");
+                            if (nameEl) {
+                                nameEl.innerText = data.addrName || "自訂位置";
+                            }
+
+                            const covEl = document.getElementById("analysisCoverage");
+                            covEl.className = "font-bold " + coveredClass;
+                            covEl.innerText = coveredText;
+
+                            // 9. 嚴重超距偏離或地名關鍵字不吻合警告
+                            const warningPanel = document.getElementById("analysisWarning");
+                            const warningText = document.getElementById("analysisWarningText");
+                            if (warningPanel && warningText) {
+                                let isMismatch = false;
+                                let mismatchReason = "";
+
+                                if (dist > 8000) {
+                                    isMismatch = true;
+                                    mismatchReason = `定位點距離基地台達 ${Math.round(dist/1000)} 公里，已超出合理覆蓋範圍！`;
+                                }
+
+                                if (data.searchQuery) {
+                                    // 智慧判定：若為純座標數值查詢（如 23.93, 120.52），直接豁免字詞比對校驗
+                                    const isCoordinateQuery = /^[0-9\.,\s-]+$/.test(data.searchQuery.trim());
+                                    
+                                    if (!isCoordinateQuery) {
+                                        let cleanInput = data.searchQuery.replace(/臺灣|台灣|臺南|台南|台北|臺北|台中|臺中|高雄|新北|桃園|基隆|新竹|苗栗|彰化|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江/g, "");
+                                        let kw = cleanInput.replace(/派出所|分局|警察局|分駐所|局|處|所|科|辦事處|委員會/g, "").trim();
+                                        if (kw.length >= 2) {
+                                            const core = kw.substring(0, 2);
+                                            if (data.addrName && !data.addrName.includes(core)) {
+                                                isMismatch = true;
+                                                if (mismatchReason) {
+                                                    mismatchReason += ` 且解析地名與搜尋詞「${core}」不吻合！`;
+                                                } else {
+                                                    mismatchReason = `解析地名與您搜尋的關鍵字「${core}」不吻合，疑似模糊搜尋誤判！`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (isMismatch) {
+                                    warningPanel.classList.remove("hidden");
+                                    warningText.innerText = `⚠️ ${mismatchReason}\n建議：若找不到特定地標，請使用右上角「地圖選點」手動標記，或搜尋鄰近道路後再拖曳 Pin 針微調。`;
+                                } else {
+                                    warningPanel.classList.add("hidden");
+                                }
+                            }
+                        }
+                    } else {
+                        // 僅有目標地址定位，無基地台定位時，將地圖移至目標位置並縮放
+                        if (save) {
+                            map.setView([data.addrLat, data.addrLng], config.defaultZoom);
+                        }
+                        if (analysisPanel) {
+                            analysisPanel.classList.add("hidden");
+                        }
+                        const warningPanel = document.getElementById("analysisWarning");
+                        if (warningPanel) {
+                            warningPanel.classList.add("hidden");
+                        }
                     }
                 } else {
                     if (analysisPanel) {
                         analysisPanel.classList.add("hidden");
+                    }
+                    const warningPanel = document.getElementById("analysisWarning");
+                    if (warningPanel) {
+                        warningPanel.classList.add("hidden");
                     }
                 }
 
@@ -827,7 +961,13 @@
                         };
                         currentHistoryId = item.id;
                         syncUI();
-                        updateMap(false);
+                        const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
+                        updateMap(false, focusType);
+                        if (data.addrLat !== null && data.addrLng !== null) {
+                            switchTab('compare');
+                        } else {
+                            switchTab('base');
+                        }
                     };
                     ul.appendChild(li);
                 });
@@ -899,45 +1039,46 @@
                 }
             }
 
-            // 折疊控制台區塊切換
-            function toggleSection(id, btn) {
-                const el = document.getElementById(id);
-                if (!el) return;
+            // Tab 標籤切換
+            function switchTab(tabName) {
+                const contents = document.querySelectorAll(".tab-content");
+                contents.forEach((el) => el.classList.add("hidden"));
 
-                const isExpanded = el.classList.contains("expanded");
-                if (isExpanded) {
-                    el.classList.remove("expanded");
-                    btn.classList.remove("active");
-                } else {
-                    el.classList.add("expanded");
-                    btn.classList.add("active");
-                    if (id === 'secHistory') {
-                        renderHistory();
-                    }
+                const targetContent = document.getElementById(`tab-content-${tabName}`);
+                if (targetContent) targetContent.classList.remove("hidden");
+
+                const buttons = document.querySelectorAll(".tab-btn");
+                buttons.forEach((btn) => btn.classList.remove("active"));
+
+                const targetBtn = document.getElementById(`tab-btn-${tabName}`);
+                if (targetBtn) targetBtn.classList.add("active");
+
+                if (tabName === "history") {
+                    renderHistory();
                 }
             }
 
-            // 摺疊/展開左側懸浮控制台
-            function toggleConsoleSide() {
-                const el = document.getElementById("consolePanel");
-                const arrow = document.getElementById("consoleToggleArrow");
-                if (!el || !arrow) return;
+            // 懸浮控制台展開/折疊切換
+            function toggleConsole(forceState) {
+                const el = document.getElementById("floating-console");
+                const arrow = document.getElementById("console-arrow");
+                if (!el) return;
 
                 const isCollapsed = el.classList.contains("collapsed");
-                if (isCollapsed) {
-                    el.classList.remove("collapsed");
-                    arrow.classList.remove("fa-chevron-right");
-                    arrow.classList.add("fa-chevron-left");
-                } else {
-                    el.classList.add("collapsed");
-                    arrow.classList.remove("fa-chevron-left");
-                    arrow.classList.add("fa-chevron-right");
-                }
+                const shouldCollapse = (forceState !== undefined) ? forceState : !isCollapsed;
 
-                if (map) {
-                    setTimeout(() => {
-                        map.invalidateSize();
-                    }, 350);
+                if (shouldCollapse) {
+                    el.classList.add("collapsed");
+                    if (arrow) {
+                        arrow.classList.remove("fa-chevron-left");
+                        arrow.classList.add("fa-chevron-right");
+                    }
+                } else {
+                    el.classList.remove("collapsed");
+                    if (arrow) {
+                        arrow.classList.remove("fa-chevron-right");
+                        arrow.classList.add("fa-chevron-left");
+                    }
                 }
             }
 
@@ -956,8 +1097,8 @@
                 locateAddress,
                 toggleMapSelect,
                 clearAddress,
-                toggleSection,
-                toggleConsoleSide,
+                switchTab,
+                toggleConsole,
             };
         })();
 

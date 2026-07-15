@@ -90,418 +90,393 @@
           object {
             vertical-align: baseline;
           }
-
-          /* 折疊控制台動畫 */
-          .collapsible-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-in-out;
-            opacity: 0;
-          }
-          .collapsible-content.expanded {
-            max-height: 1000px;
-            opacity: 1;
-          }
-          .collapsible-header i.fa-chevron-down {
-            transition: transform 0.2s ease-in-out;
-          }
-          .collapsible-header.active i.fa-chevron-down {
-            transform: rotate(-180deg);
-          }
-
-          /* 側邊懸浮面板樣式與動畫 */
-          .console-panel {
-            position: fixed;
-            z-index: 1000; /* 確保位於 Leaflet 與 Overlay 之上 */
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            transform: translateX(0);
-          }
-          
-          @media (min-width: 768px) {
-            .console-panel {
-              width: 380px;
-              top: 24px;
-              left: 24px;
-              max-height: calc(100vh - 48px);
-            }
-            .console-panel.collapsed {
-              transform: translateX(calc(-100% - 30px)); /* 完全滑出左側螢幕，包含 margin 與 shadow */
-            }
-          }
-
-          @media (max-width: 767px) {
-            .console-panel {
-              width: calc(100vw - 24px);
-              top: 12px;
-              left: 12px;
-              max-height: calc(100vh - 24px);
-            }
-            .console-panel.collapsed {
-              transform: translateX(calc(-100% - 15px));
-            }
-          }
-
-          /* 折疊切換外掛按鈕把手 */
-          .toggle-handle {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            right: -24px; /* 卡在卡片右側外緣 */
-            width: 24px;
-            height: 64px;
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(12px);
-            border-top: 1px solid rgba(255, 255, 255, 0.6);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.6);
-            border-right: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 0 12px 12px 0;
-            box-shadow: 4px 0 10px rgba(0, 0, 0, 0.08);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            z-index: 1010;
-            transition: background-color 0.2s, color 0.2s;
-          }
-          .toggle-handle:hover {
-            background: rgba(255, 255, 255, 0.95);
-            color: var(--color-accent, #2563eb);
-          }
         }
+    </style>
+
+    <style>
+      /* Tab 按鈕狀態 */
+      .tab-btn {
+        color: #94a3b8;
+        border-bottom: 2px solid transparent;
+        padding-bottom: 6px;
+        transition: all 0.2s ease-in-out;
+      }
+      .tab-btn:hover {
+        color: #475569;
+      }
+      .tab-btn.active {
+        color: #2563eb;
+        border-bottom-color: #2563eb;
+      }
+
+      /* 懸浮控制台平移動畫 */
+      #floating-console {
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #floating-console.collapsed {
+        transform: translateX(-376px);
+      }
+
+      /* 歷史紀錄自訂微型滾動條 */
+      #list::-webkit-scrollbar {
+        width: 4px;
+      }
+      #list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      #list::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 2px;
+      }
+      #list::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
     </style>
 
     <link rel="stylesheet" href="css/style.css">
 </head>
 
-<body class="bg-gradient-to-br from-slate-50 to-slate-200 text-slate-800 font-sans overflow-x-hidden select-none pb-20 overscroll-none min-h-screen">
+<body class="bg-slate-100 text-slate-800 font-sans overflow-hidden select-none w-screen h-screen">
 
+    <!-- 1. 滿版背景地圖 -->
+    <div id="map-container" class="fixed inset-0 w-full h-full z-0">
+        <div id="map" class="w-full h-full"></div>
+    </div>
 
+    <!-- 2. 背景遮罩 (Overlay) -->
+    <div id="configOverlay"
+        class="fixed inset-0 bg-black/40 z-[90] hidden opacity-0 transition-opacity duration-300 pointer-events-auto">
+    </div>
 
-        <!-- 背景遮罩 (Overlay) -->
-        <div id="configOverlay"
-            class="fixed inset-0 bg-black/40 z-[90] hidden opacity-0 transition-opacity duration-300">
+    <!-- 3. 進階設定面板 (側邊抽屜) -->
+    <div id="configPanel"
+        class="fixed top-0 right-0 h-full w-[320px] bg-white shadow-[-10px_0_30px_rgba(0,0,0,0.1)] z-[100] transform translate-x-full transition-transform duration-300 ease-in-out p-6 flex flex-col pointer-events-none data-[open=true]:translate-x-0 data-[open=true]:pointer-events-auto">
+
+        <!-- 抽屜標題列 -->
+        <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+            <h3 class="text-base font-bold text-primary flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-accent"></i> 進階地圖參數
+            </h3>
+            <button id="btnCloseConfig" class="text-slate-400 hover:text-danger transition-colors p-1 border-none bg-transparent cursor-pointer"
+                aria-label="關閉設定">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
         </div>
 
-        <!-- 進階設定面板 (側邊抽屜) -->
-        <div id="configPanel"
-            class="fixed top-0 right-0 h-full w-[320px] bg-white shadow-[-10px_0_30px_rgba(0,0,0,0.1)] z-[100] transform translate-x-full transition-transform duration-300 ease-in-out p-6 flex flex-col pointer-events-none data-[open=true]:translate-x-0 data-[open=true]:pointer-events-auto">
-
-            <!-- 抽屜標題列 -->
-            <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-                <h3 class="text-base font-bold text-primary flex items-center gap-2">
-                    <i class="fa-solid fa-sliders text-accent"></i> 進階地圖參數
-                </h3>
-                <button id="btnCloseConfig" class="text-slate-400 hover:text-danger transition-colors p-1"
-                    aria-label="關閉設定">
-                    <i class="fa-solid fa-xmark text-xl"></i>
+        <!-- 滾動內容區 -->
+        <div class="flex-1 overflow-y-auto pr-1 -mr-1 space-y-8 pointer-events-auto">
+            <!-- 恢復預設值按鈕 -->
+            <div class="flex justify-start">
+                <button id="btnResetConfig"
+                    class="text-[12px] text-accent hover:underline flex items-center gap-1 border-none bg-transparent cursor-pointer">
+                    <i class="fa-solid fa-rotate-left"></i> 恢復預設值
                 </button>
             </div>
 
-            <!-- 滾動內容區 -->
-            <div class="flex-1 overflow-y-auto pr-1 -mr-1 space-y-8">
-                <!-- 恢復預設值按鈕 -->
-                <div class="flex justify-start">
-                    <button id="btnResetConfig"
-                        class="text-[12px] text-accent hover:underline flex items-center gap-1 border-none bg-transparent cursor-pointer">
-                        <i class="fa-solid fa-rotate-left"></i> 恢復預設值
-                    </button>
+            <!-- 參數調整項 (垂直排列) -->
+            <div class="space-y-7">
+                <!-- 扇形半徑 -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-baseline">
+                        <label class="text-[13px] font-bold text-slate-700">扇形追蹤半徑 (公尺)</label>
+                        <span id="cfg-radius-val" class="text-[13px] font-mono font-bold text-accent">300</span>
+                    </div>
+                    <input type="range" id="cfg-radius" min="50" max="1000" step="50" aria-label="扇形追蹤半徑"
+                        class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
+                    <p class="text-[11px] text-slate-400 leading-normal">
+                        增加：圓弧變大，涵蓋範圍較廣。<br>
+                        減少：圓弧變小，聚焦核心點。
+                    </p>
                 </div>
 
-                <!-- 參數調整項 (垂直排列) -->
-                <div class="space-y-7">
-                    <!-- 扇形半徑 -->
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-baseline">
-                            <label class="text-[13px] font-bold text-slate-700">扇形追蹤半徑 (公尺)</label>
-                            <span id="cfg-radius-val" class="text-[13px] font-mono font-bold text-accent">300</span>
-                        </div>
-                        <input type="range" id="cfg-radius" min="50" max="1000" step="50" aria-label="扇形追蹤半徑"
-                            class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
-                        <p class="text-[11px] text-slate-400 leading-normal">
-                            增加：圓弧變大，涵蓋範圍較廣。<br>
-                            減少：圓弧變小，聚焦核心點。
-                        </p>
+                <!-- 扇形夾角 -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-baseline">
+                        <label class="text-[13px] font-bold text-slate-700">扇形夾角 (度)</label>
+                        <span id="cfg-aperture-val" class="text-[13px] font-mono font-bold text-accent">60</span>
                     </div>
-
-                    <!-- 扇形夾角 -->
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-baseline">
-                            <label class="text-[13px] font-bold text-slate-700">扇形夾角 (度)</label>
-                            <span id="cfg-aperture-val" class="text-[13px] font-mono font-bold text-accent">60</span>
-                        </div>
-                        <input type="range" id="cfg-aperture" min="10" max="180" step="10" aria-label="扇形夾角"
-                            class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
-                        <p class="text-[11px] text-slate-400 leading-normal">
-                            增加：角度變寬，指向精確度降低。<br>
-                            減少：角度變窄，精準指向方位。
-                        </p>
-                    </div>
-
-                    <!-- 地圖縮放層級 -->
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-baseline">
-                            <label class="text-[13px] font-bold text-slate-700">預設地圖縮放 (Zoom)</label>
-                            <span id="cfg-zoom-val" class="text-[13px] font-mono font-bold text-accent">16</span>
-                        </div>
-                        <input type="range" id="cfg-zoom" min="10" max="20" step="1" aria-label="預設地圖縮放"
-                            class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
-                        <p class="text-[11px] text-slate-400 leading-normal">
-                            增加：地圖細節更多 (建築物見)。<br>
-                            減少：區域視角更廣 (路街道見)。
-                        </p>
-                    </div>
-
-                    <!-- 歷史紀錄上限 -->
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-baseline">
-                            <label class="text-[13px] font-bold text-slate-700">歷史紀錄儲存上限 (筆)</label>
-                            <span id="cfg-history-limit-val"
-                                class="text-[13px] font-mono font-bold text-accent">50</span>
-                        </div>
-                        <input type="range" id="cfg-history-limit" min="10" max="200" step="10" aria-label="歷史紀錄儲存上限"
-                            class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
-                        <p class="text-[11px] text-slate-400 leading-normal">
-                            增加：可追溯更多過往紀錄。<br>
-                            減少：清理舊資料，保持介面親和。
-                        </p>
-                    </div>
+                    <input type="range" id="cfg-aperture" min="10" max="180" step="10" aria-label="扇形夾角"
+                        class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
+                    <p class="text-[11px] text-slate-400 leading-normal">
+                        增加：角度變寬，指向精確度降低。<br>
+                        減少：角度變窄，精準指向方位。
+                    </p>
                 </div>
-            </div>
 
-            <!-- 頁尾提醒 -->
-            <div class="mt-auto pt-6 border-t border-slate-50">
-                <p class="text-[11px] text-slate-400 italic text-center leading-normal">
-                    變更將自動儲存於瀏覽器，<br>下次開啟時直接套用。
-                </p>
+                <!-- 地圖縮放層級 -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-baseline">
+                        <label class="text-[13px] font-bold text-slate-700">預設地圖縮放 (Zoom)</label>
+                        <span id="cfg-zoom-val" class="text-[13px] font-mono font-bold text-accent">16</span>
+                    </div>
+                    <input type="range" id="cfg-zoom" min="10" max="22" step="1" aria-label="預設地圖縮放"
+                        class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
+                    <p class="text-[11px] text-slate-400 leading-normal">
+                        增加：地圖細節更多 (建築物見)。<br>
+                        減少：區域視角更廣 (路街道見)。
+                    </p>
+                </div>
+
+                <!-- 歷史紀錄上限 -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-baseline">
+                        <label class="text-[13px] font-bold text-slate-700">歷史紀錄儲存上限 (筆)</label>
+                        <span id="cfg-history-limit-val"
+                            class="text-[13px] font-mono font-bold text-accent">50</span>
+                    </div>
+                    <input type="range" id="cfg-history-limit" min="10" max="200" step="10" aria-label="歷史紀錄儲存上限"
+                        class="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-accent">
+                    <p class="text-[11px] text-slate-400 leading-normal">
+                        增加：可追溯更多過往紀錄。<br>
+                        減少：清理舊資料，保持介面親和。
+                    </p>
+                </div>
             </div>
         </div>
 
-    <!-- Order 1: 單一整合控制台 (懸浮面板) -->
-    <div id="consolePanel" class="console-panel card bg-white/80 backdrop-blur-xl border border-white/60 rounded-2xl p-5 shadow-2xl flex flex-col justify-between overflow-hidden">
-        <!-- 折疊切換外掛按鈕把手 -->
-        <button id="btnConsoleToggle" class="toggle-handle border-none outline-none animate-pulse" onclick="app.toggleConsoleSide()" title="收合/展開控制台">
-            <i class="fa-solid fa-chevron-left text-slate-500 text-[10px] transition-transform duration-300" id="consoleToggleArrow"></i>
-        </button>
-        
-        <!-- 內部可滾動容器 -->
-        <div class="flex-1 overflow-y-auto pr-1 space-y-4 max-h-full">
-            <!-- 標題區塊 (從外部移入，做在卡片頂端) -->
-            <div class="text-center pb-3 border-b border-slate-200 relative">
-                <h1 class="text-xl font-bold text-primary mb-1 flex justify-center items-center">
-                    <i class="fa-solid fa-user-shield mr-2"></i>手機門號即時定位
-                </h1>
-                <div class="flex justify-center items-center gap-2 text-[#7f8c8d] text-xs font-medium">
-                    <span>V2.0</span>
-                    <button id="btnToggleConfig"
-                        class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 flex items-center border-none bg-transparent cursor-pointer"
-                        title="進階設定">
-                        <i class="fa-solid fa-gear text-sm"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 分享與複製按鈕 (常駐於標題之下) -->
-            <div class="action-grid grid grid-cols-2 gap-[10px] pb-3 border-b border-slate-200">
-                <button
-                    class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-accent transition-all border border-slate-200 text-xs"
-                    onclick="app.openMap()">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="GMap" class="w-4 h-4"> Google Map
-                </button>
-                <button
-                    class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-copy transition-all border border-slate-200 text-xs"
-                    onclick="app.copy()">
-                    <i class="fa-regular fa-copy text-base text-copy"></i> 複製資訊
-                </button>
-                <button
-                    class="btn bg-gradient-to-b from-[#38bdf8] to-[#0ea5e9] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#0ea5e9]/30 transition-all border border-[#0284c7]/20 text-xs"
-                    onclick="app.share('tg')">
-                    <i class="fa-brands fa-telegram text-base"></i> Telegram
-                </button>
-                <button
-                    class="btn bg-gradient-to-b from-[#4ade80] to-[#22c55e] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#22c55e]/30 transition-all border border-[#16a34a]/20 text-xs"
-                    onclick="app.share('line')">
-                    <i class="fa-brands fa-line text-base"></i> LINE
-                </button>
-            </div>
-                    <div class="hint text-center text-[0.85rem] text-slate-500 mb-[10px] font-medium">
-                        <i class="fa-solid fa-wand-magic-sparkles text-accent"></i> 貼上整段文字，自動辨識座標與門號
-                    </div>
-                    <textarea id="rawInput"
-                        class="smart-area w-full border border-slate-300 rounded-xl p-4 text-[0.95rem] font-mono transition-all bg-white/80 h-[90px] focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white focus:outline-none mb-[12px] shadow-inner"
-                        placeholder="長按貼上... (支援 LINE/簡訊 格式)"></textarea>
-
-                    <div class="flex gap-[10px] mb-[12px]">
-                        <button
-                            class="btn flex-1 bg-gradient-to-b from-emerald-400 to-emerald-500 text-white py-2.5 px-4 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-emerald-500/30 transition-all border border-emerald-600/20 text-sm"
-                            onclick="app.pasteInput()">
-                            <i class="fa-solid fa-paste"></i> 貼上
-                        </button>
-                        <button
-                            class="btn flex-1 bg-gradient-to-b from-slate-400 to-slate-500 text-white py-2.5 px-4 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-slate-500/30 transition-all border border-slate-600/20 text-sm"
-                            onclick="app.clearInput()">
-                            <i class="fa-solid fa-eraser"></i> 清空
-                        </button>
-                    </div>
-
-                    <button
-                        class="btn btn-main w-full bg-gradient-to-b from-accent to-blue-600 text-white py-3 px-4 rounded-xl font-bold cursor-pointer flex items-center justify-center gap-2 mb-4 shadow-lg shadow-accent/30 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-xl hover:shadow-accent/40 transition-all border border-blue-700/20 text-base"
-                        onclick="app.parse()">
-                        <i class="fa-solid fa-bolt"></i> 解析並定位
-                    </button>
-
-                    <!-- === 折疊式控制台區塊 === -->
-                    <div class="space-y-2">
-                        
-                        <!-- 區塊一：⚡ 基地台定位資訊 -->
-                        <div class="border-b border-slate-100 pb-2">
-                            <button class="collapsible-header active w-full flex justify-between items-center py-2 text-sm font-bold text-slate-700 hover:text-accent transition-colors outline-none" onclick="app.toggleSection('secBaseInfo', this)">
-                                <span class="flex items-center"><i class="fa-solid fa-tower-cell text-accent mr-2"></i> 基地台定位資訊</span>
-                                <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
-                            </button>
-                            <div id="secBaseInfo" class="collapsible-content expanded space-y-3 pt-2">
-                                <div class="input-group">
-                                    <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1"><i
-                                            class="fa-solid fa-mobile-screen text-accent mr-1"></i> 門號</label>
-                                    <input type="tel" id="phone"
-                                        class="phone-input w-full border border-slate-200 rounded-xl p-2.5 text-sm font-mono bg-white/60 text-primary font-bold focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                        placeholder="09xxxxxxxx">
-                                </div>
-                                <div class="input-group">
-                                    <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1"><i
-                                            class="fa-regular fa-clock text-accent mr-1"></i> 定位請求時間</label>
-                                    <input type="text" id="reqTime"
-                                        class="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                        placeholder="yyyy/MM/dd HH:mm:ss">
-                                </div>
-                                <div class="input-group">
-                                    <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1"><i
-                                            class="fa-solid fa-tower-cell text-accent mr-1"></i> 註冊基地台時間</label>
-                                    <input type="text" id="regTime"
-                                        class="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                        placeholder="yyyy/MM/dd HH:mm:ss">
-                                </div>
-                                <div class="input-group flex gap-[12px]">
-                                    <div class="flex-1">
-                                        <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1">緯度 (Lat)</label>
-                                        <input type="number" id="lat" step="any"
-                                            class="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                            placeholder="23.xxxxx">
-                                    </div>
-                                    <div class="flex-1">
-                                        <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1">經度 (Lng)</label>
-                                        <input type="number" id="lng" step="any"
-                                            class="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                            placeholder="120.xxxxx">
-                                    </div>
-                                </div>
-                                <div class="input-group">
-                                    <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1">方位角 <span
-                                            class="font-medium text-slate-400 text-[0.75rem] ml-1">(0-360)</span></label>
-                                    <input type="number" id="azi"
-                                        class="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                        placeholder="選填">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 區塊二：🏠 目標位置關聯 (選填) -->
-                        <div class="border-b border-slate-100 pb-2">
-                            <button class="collapsible-header w-full flex justify-between items-center py-2 text-sm font-bold text-slate-700 hover:text-accent transition-colors outline-none" onclick="app.toggleSection('secTargetAddr', this)">
-                                <span class="flex items-center"><i class="fa-solid fa-house text-orange-500 mr-2"></i> 目標關連位置 <span class="text-xs font-normal text-slate-400 ml-1">(選填)</span></span>
-                                <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
-                            </button>
-                            <div id="secTargetAddr" class="collapsible-content space-y-3 pt-2">
-                                <div class="input-group">
-                                    <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1 flex items-center justify-between">
-                                        <span>輸入地址 / 地標</span>
-                                        <button id="btnMapSelect" class="text-[11px] text-accent hover:underline flex items-center gap-0.5 border-none bg-transparent cursor-pointer transition-all animate-pulse" onclick="app.toggleMapSelect(event)">
-                                            <i class="fa-solid fa-crosshairs"></i> <span id="mapSelectStatus">地圖選點</span>
-                                        </button>
-                                    </label>
-                                    <div class="flex gap-2">
-                                        <input type="text" id="targetAddr"
-                                            class="w-full border border-slate-200 rounded-xl p-2.5 text-xs bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                            placeholder="輸入地址或偏鄉地標...">
-                                        <button id="btnLocateAddr"
-                                            class="bg-gradient-to-b from-orange-400 to-orange-500 text-white px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center hover:shadow-md hover:shadow-orange-500/20 active:translate-y-0.5 transition-all border border-orange-600/20 text-xs"
-                                            onclick="app.locateAddress()"
-                                            title="解析定位">
-                                            <i class="fa-solid fa-magnifying-glass"></i>
-                                        </button>
-                                        <button id="btnClearAddr"
-                                            class="bg-gradient-to-b from-slate-200 to-slate-300 text-slate-600 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center hover:bg-slate-300 hover:text-del active:translate-y-0.5 transition-all border border-slate-300/30 text-xs"
-                                            onclick="app.clearAddress()"
-                                            title="清除定位">
-                                            <i class="fa-solid fa-trash-can"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="input-group flex gap-[12px]">
-                                    <div class="flex-1">
-                                        <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1">地址緯度 (Lat)</label>
-                                        <input type="number" id="addrLat" step="any"
-                                            class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                            placeholder="選填">
-                                    </div>
-                                    <div class="flex-1">
-                                        <label class="block font-bold text-slate-600 mb-[4px] text-[0.8rem] pl-1">地址經度 (Lng)</label>
-                                        <input type="number" id="addrLng" step="any"
-                                            class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white transition-all outline-none shadow-sm"
-                                            placeholder="選填">
-                                    </div>
-                                </div>
-                                <!-- 空間比對分析面板 -->
-                                <div id="analysisPanel" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
-                                    <div class="font-bold text-slate-700 flex items-center gap-1.5 border-b border-slate-200/60 pb-1.5 mb-1">
-                                        <i class="fa-solid fa-chart-simple text-accent"></i> 空間關聯分析
-                                    </div>
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-slate-500">📏 直線距離：</span>
-                                        <span id="analysisDistance" class="font-mono font-bold text-slate-800">-</span>
-                                    </div>
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-slate-500">🧭 相對方位角：</span>
-                                        <span id="analysisBearing" class="font-mono font-bold text-slate-800">-</span>
-                                    </div>
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-slate-500">📡 訊號覆蓋狀態：</span>
-                                        <span id="analysisCoverage" class="font-bold">-</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 區塊三：📜 最近查詢歷史 -->
-                        <div class="border-b border-slate-100 pb-2">
-                            <button class="collapsible-header w-full flex justify-between items-center py-2 text-sm font-bold text-slate-700 hover:text-accent transition-colors outline-none" onclick="app.toggleSection('secHistory', this)">
-                                <span class="flex items-center"><i class="fa-solid fa-clock-rotate-left text-violet-500 mr-2"></i> 最近查詢歷史</span>
-                                <i class="fa-solid fa-chevron-down text-slate-400 text-xs"></i>
-                            </button>
-                            <div id="secHistory" class="collapsible-content space-y-2 pt-2">
-                                <div class="flex justify-between items-center mb-1">
-                                    <span class="text-[11px] text-slate-400">保留最近查詢紀錄</span>
-                                    <button class="text-slate-500 py-1 px-2.5 rounded-lg text-[11px] bg-white border border-slate-200 cursor-pointer hover:bg-red-50 hover:text-del hover:border-del/30 transition-all shadow-sm" onclick="app.clearHistory(event)">
-                                        <i class="fa-regular fa-trash-can"></i> 清除全部
-                                    </button>
-                                </div>
-                                <ul id="list" class="m-0 p-0 list-none max-h-[180px] overflow-y-auto pr-1"></ul>
-                            </div>
-                        </div>
-            </div>
-        </div>
-
-        <!-- 頁尾區 (移入面板底部) -->
-        <div class="pt-3 border-t border-slate-200 mt-2">
-            <div class="footer text-center text-[10px] text-[#bdc3c7]">
-                System initialized. Version 2.0<br>
-                &copy; 2026 Cell Phone Locator. All rights reserved.
-            </div>
+        <!-- 頁尾提醒 -->
+        <div class="mt-auto pt-6 border-t border-slate-50 pointer-events-auto">
+            <p class="text-[11px] text-slate-400 italic text-center leading-normal">
+                變更將自動儲存於瀏覽器，<br>下次開啟時直接套用。
+            </p>
         </div>
     </div>
 
-    <!-- 地圖背景 (滿版鋪底) -->
-    <div id="map-container" class="w-screen h-screen fixed inset-0 z-0 bg-slate-100 overflow-hidden">
-        <div id="map" class="w-full h-full"></div>
+    <!-- 4. 前台懸浮覆蓋層 (z-10, pointer-events-none 允許穿透操作地圖) -->
+    <div class="fixed inset-0 z-10 pointer-events-none p-4 md:p-6 flex flex-col justify-between">
+        
+        <!-- 左上角大一統控制台 -->
+        <div id="floating-console" class="absolute top-4 md:top-6 left-4 md:left-6 z-20 pointer-events-auto w-[360px] flex flex-col transition-all duration-300">
+            <div id="console-card" class="bg-white/85 backdrop-blur-xl border border-white/60 rounded-2xl shadow-2xl p-4 flex flex-col overflow-hidden max-h-[calc(100vh-80px)]">
+                
+                <!-- 系統標題與設定按鈕 -->
+                <div class="flex justify-between items-center pb-3 border-b border-slate-200/60 mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-user-shield text-accent text-lg animate-pulse"></i>
+                        <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.0</span></h1>
+                    </div>
+                    <button id="btnToggleConfig" class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 border-none bg-transparent cursor-pointer flex items-center" title="進階設定">
+                        <i class="fa-solid fa-gear text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Tabs 標籤選單 -->
+                <div class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
+                    <button onclick="app.switchTab('parse')" id="tab-btn-parse" class="tab-btn active flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                        <i class="fa-solid fa-bolt text-sm"></i><span>智慧解析</span>
+                    </button>
+                    <button onclick="app.switchTab('base')" id="tab-btn-base" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                        <i class="fa-solid fa-tower-cell text-sm"></i><span>定位資料</span>
+                    </button>
+                    <button onclick="app.switchTab('compare')" id="tab-btn-compare" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                        <i class="fa-solid fa-house-laptop text-sm"></i><span>空間對比</span>
+                    </button>
+                    <button onclick="app.switchTab('history')" id="tab-btn-history" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                        <i class="fa-solid fa-clock-rotate-left text-sm"></i><span>最近歷史</span>
+                    </button>
+                </div>
+
+                <!-- 各 Tab 內容容器 -->
+                <div class="flex-1 overflow-y-auto pr-0.5 space-y-3" style="max-height: calc(100vh - 200px);">
+                    
+                    <!-- Tab 1: 智慧解析 -->
+                    <div id="tab-content-parse" class="tab-content space-y-3">
+                        <div class="hint text-center text-[11px] text-slate-500 font-medium">
+                            <i class="fa-solid fa-wand-magic-sparkles text-accent"></i> 貼上整段文字，自動辨識座標與門號
+                        </div>
+                        <textarea id="rawInput"
+                            class="smart-area w-full border border-slate-300 rounded-xl p-3 text-xs font-mono transition-all bg-white/90 h-[90px] focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white focus:outline-none mb-1 shadow-inner"
+                            placeholder="長按貼上... (支援 LINE/簡訊 格式)"></textarea>
+
+                        <div class="flex gap-2">
+                            <button
+                                class="btn flex-1 bg-gradient-to-b from-emerald-400 to-emerald-500 text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:shadow-emerald-500/20 transition-all border border-emerald-600/20 text-xs"
+                                onclick="app.pasteInput()">
+                                <i class="fa-solid fa-paste"></i> 貼上
+                            </button>
+                            <button
+                                class="btn flex-1 bg-gradient-to-b from-slate-400 to-slate-500 text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:shadow-slate-500/20 transition-all border border-slate-600/20 text-xs"
+                                onclick="app.clearInput()">
+                                <i class="fa-solid fa-eraser"></i> 清空
+                            </button>
+                        </div>
+
+                        <button
+                            class="btn btn-main w-full bg-gradient-to-b from-accent to-blue-600 text-white py-2.5 px-4 rounded-xl font-bold cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-accent/20 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg transition-all border border-blue-700/20 text-sm"
+                            onclick="app.parse()">
+                            <i class="fa-solid fa-bolt"></i> 解析並定位
+                        </button>
+
+                        <!-- 分享與複製按鈕 (移到最上方) -->
+                        <div class="action-grid grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/50">
+                            <button
+                                class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-accent transition-all border border-slate-200 text-xs"
+                                onclick="app.openMap()">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="GMap" class="w-4 h-4"> Google Map
+                            </button>
+                            <button
+                                class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-copy transition-all border border-slate-200 text-xs"
+                                onclick="app.copy()">
+                                <i class="fa-regular fa-copy text-copy"></i> 複製資訊
+                            </button>
+                            <button
+                                class="btn bg-gradient-to-b from-[#38bdf8] to-[#0ea5e9] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#0ea5e9]/20 transition-all border border-[#0284c7]/20 text-xs"
+                                onclick="app.share('tg')">
+                                <i class="fa-brands fa-telegram"></i> Telegram
+                            </button>
+                            <button
+                                class="btn bg-gradient-to-b from-[#4ade80] to-[#22c55e] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#22c55e]/20 transition-all border border-[#16a34a]/20 text-xs"
+                                onclick="app.share('line')">
+                                <i class="fa-brands fa-line"></i> LINE
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: 定位資料 -->
+                    <div id="tab-content-base" class="tab-content hidden space-y-3">
+                        <div class="input-group">
+                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
+                                    class="fa-solid fa-mobile-screen text-accent mr-1"></i> 門號</label>
+                            <input type="tel" id="phone"
+                                class="phone-input w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-primary font-bold focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                placeholder="09xxxxxxxx">
+                        </div>
+                        <div class="input-group">
+                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
+                                    class="fa-regular fa-clock text-accent mr-1"></i> 定位請求時間</label>
+                            <input type="text" id="reqTime"
+                                class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                placeholder="yyyy/MM/dd HH:mm:ss">
+                        </div>
+                        <div class="input-group">
+                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
+                                    class="fa-solid fa-tower-cell text-accent mr-1"></i> 註冊基地台時間</label>
+                            <input type="text" id="regTime"
+                                class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                placeholder="yyyy/MM/dd HH:mm:ss">
+                        </div>
+                        <div class="input-group flex gap-2">
+                            <div class="flex-1">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">緯度 (Lat)</label>
+                                <input type="number" id="lat" step="any"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="23.xxxxx">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">經度 (Lng)</label>
+                                <input type="number" id="lng" step="any"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="120.xxxxx">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">方位角 <span
+                                    class="font-medium text-slate-400 text-[10px] ml-1">(0-360)</span></label>
+                            <input type="number" id="azi"
+                                class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                placeholder="選填">
+                        </div>
+                        <button class="btn w-full bg-gradient-to-b from-blue-500 to-blue-600 text-white py-2 px-4 rounded-xl font-bold text-xs shadow-md mt-2" onclick="app.updateMap(true)">
+                            <i class="fa-solid fa-rotate mr-1"></i> 套用變更並重繪
+                        </button>
+                    </div>
+
+                    <!-- Tab 3: 空間對比 -->
+                    <div id="tab-content-compare" class="tab-content hidden space-y-3">
+                        <div class="input-group">
+                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1 flex items-center justify-between">
+                                <span><i class="fa-solid fa-house text-orange-500 mr-1"></i> 目標地址 / 位置</span>
+                                <button id="btnMapSelect" class="text-[10px] text-accent hover:underline flex items-center gap-0.5 border-none bg-transparent cursor-pointer transition-all animate-pulse" onclick="app.toggleMapSelect(event)">
+                                    <i class="fa-solid fa-crosshairs"></i> <span id="mapSelectStatus">地圖選點</span>
+                                </button>
+                            </label>
+                            <p class="text-[10px] text-amber-600 font-semibold mb-1.5 pl-1 flex items-center gap-1">
+                                <i class="fa-solid fa-triangle-exclamation"></i> 關鍵字搜尋可能不精準，請參考使用
+                            </p>
+                            <div class="flex gap-2">
+                                <input type="text" id="targetAddr"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="輸入地址或偏鄉地標...">
+                                <button id="btnLocateAddr"
+                                    class="bg-gradient-to-b from-orange-400 to-orange-500 text-white px-2.5 rounded-xl font-semibold cursor-pointer flex items-center justify-center hover:shadow-md hover:shadow-orange-500/20 active:translate-y-0.5 transition-all border border-orange-600/20 text-xs"
+                                    onclick="app.locateAddress()"
+                                    title="解析定位">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                </button>
+                                <button id="btnClearAddr"
+                                    class="bg-gradient-to-b from-slate-200 to-slate-300 text-slate-600 px-2.5 rounded-xl font-semibold cursor-pointer flex items-center justify-center hover:bg-slate-300 hover:text-del active:translate-y-0.5 transition-all border border-slate-300/30 text-xs"
+                                    onclick="app.clearAddress()"
+                                    title="清除定位">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="input-group flex gap-2">
+                            <div class="flex-1">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">地址緯度 (Lat)</label>
+                                <input type="number" id="addrLat" step="any"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="選填">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">地址經度 (Lng)</label>
+                                <input type="number" id="addrLng" step="any"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="選填">
+                            </div>
+                        </div>
+                        <!-- 空間比對分析面板 -->
+                        <div id="analysisPanel" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
+                            <div class="font-bold text-slate-700 flex items-center gap-1.5 border-b border-slate-200/60 pb-1.5 mb-1">
+                                <i class="fa-solid fa-chart-simple text-accent"></i> 空間關聯分析
+                            </div>
+                            <div class="flex flex-col gap-0.5 border-b border-slate-200/40 pb-1.5 mb-1.5">
+                                <span class="text-slate-500">📍 解析地標名稱：</span>
+                                <span id="analysisResultName" class="font-bold text-slate-800 break-all text-[11px]">-</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500">📏 直線距離：</span>
+                                <span id="analysisDistance" class="font-mono font-bold text-slate-800">-</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500">🧭 相對方位角：</span>
+                                <span id="analysisBearing" class="font-mono font-bold text-slate-800">-</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500">📡 訊號覆蓋狀態：</span>
+                                <span id="analysisCoverage" class="font-bold">-</span>
+                            </div>
+                            <!-- 偏離警告區塊 -->
+                            <div id="analysisWarning" class="hidden bg-red-50 border border-red-200 rounded-lg p-2.5 mt-2.5 text-red-600 font-bold flex items-start gap-1.5">
+                                <i class="fa-solid fa-circle-exclamation mt-0.5 shrink-0 text-red-500 text-sm"></i>
+                                <span id="analysisWarningText" class="leading-normal text-[11px]"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 4: 最近歷史 -->
+                    <div id="tab-content-history" class="tab-content hidden space-y-2">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] text-slate-400">保留最近查詢紀錄</span>
+                            <button class="text-slate-500 py-1 px-2.5 rounded-lg text-[10px] bg-white border border-slate-200 cursor-pointer hover:bg-red-50 hover:text-del hover:border-del/30 transition-all shadow-sm" onclick="app.clearHistory(event)">
+                                <i class="fa-regular fa-trash-can"></i> 清除全部
+                            </button>
+                        </div>
+                        <ul id="list" class="m-0 p-0 list-none max-h-[220px] overflow-y-auto pr-1"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 懸浮向左收合拉手按鈕 -->
+            <button id="btnToggleConsole" class="absolute -right-7 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md border border-white/60 text-slate-500 w-7 h-14 rounded-r-xl shadow-lg flex items-center justify-center cursor-pointer transition-all hover:bg-white hover:text-accent pointer-events-auto" onclick="app.toggleConsole()">
+                <i class="fa-solid fa-chevron-left text-xs" id="console-arrow"></i>
+            </button>
+        </div>
+
+        <!-- 懸浮左下角頁尾 (常駐, pointer-events-auto) -->
+        <div class="mt-auto pointer-events-auto text-[10px] text-slate-400/80 bg-white/40 backdrop-blur-sm border border-white/30 px-3 py-1 rounded-full w-fit">
+            System Version 3.0 &copy; 2026 Cell Phone Locator. All rights reserved.
+        </div>
     </div>
 
     <script src="js/app.js"></script>
