@@ -108,6 +108,65 @@
           .collapsible-header.active i.fa-chevron-down {
             transform: rotate(-180deg);
           }
+
+          /* 側邊懸浮面板樣式與動畫 */
+          .console-panel {
+            position: fixed;
+            z-index: 1000; /* 確保位於 Leaflet 與 Overlay 之上 */
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateX(0);
+          }
+          
+          @media (min-width: 768px) {
+            .console-panel {
+              width: 380px;
+              top: 24px;
+              left: 24px;
+              max-height: calc(100vh - 48px);
+            }
+            .console-panel.collapsed {
+              transform: translateX(calc(-100% - 30px)); /* 完全滑出左側螢幕，包含 margin 與 shadow */
+            }
+          }
+
+          @media (max-width: 767px) {
+            .console-panel {
+              width: calc(100vw - 24px);
+              top: 12px;
+              left: 12px;
+              max-height: calc(100vh - 24px);
+            }
+            .console-panel.collapsed {
+              transform: translateX(calc(-100% - 15px));
+            }
+          }
+
+          /* 折疊切換外掛按鈕把手 */
+          .toggle-handle {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            right: -24px; /* 卡在卡片右側外緣 */
+            width: 24px;
+            height: 64px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid rgba(255, 255, 255, 0.6);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+            border-right: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 0 12px 12px 0;
+            box-shadow: 4px 0 10px rgba(0, 0, 0, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 1010;
+            transition: background-color 0.2s, color 0.2s;
+          }
+          .toggle-handle:hover {
+            background: rgba(255, 255, 255, 0.95);
+            color: var(--color-accent, #2563eb);
+          }
         }
     </style>
 
@@ -117,21 +176,7 @@
 <body class="bg-gradient-to-br from-slate-50 to-slate-200 text-slate-800 font-sans overflow-x-hidden select-none pb-20 overscroll-none min-h-screen">
 
 
-    <div class="container mx-auto p-[15px] max-w-[600px] md:max-w-7xl pt-10">
-        <!-- 標題區塊 (統一風格) -->
-        <div class="text-center mb-8 relative">
-            <h1 class="text-3xl font-bold text-primary mb-2.5 flex justify-center items-center">
-                <i class="fa-solid fa-user-shield mr-3"></i>手機門號即時定位
-            </h1>
-            <div class="flex justify-center items-center gap-3 text-[#7f8c8d] text-sm font-medium">
-                <span>V2.0</span>
-                <button id="btnToggleConfig"
-                    class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 flex items-center"
-                    title="進階設定">
-                    <i class="fa-solid fa-gear text-lg"></i>
-                </button>
-            </div>
-        </div>
+
         <!-- 背景遮罩 (Overlay) -->
         <div id="configOverlay"
             class="fixed inset-0 bg-black/40 z-[90] hidden opacity-0 transition-opacity duration-300">
@@ -231,34 +276,53 @@
             </div>
         </div>
 
-        <!-- 核心佈局 Grid -->
-        <div class="flex flex-col gap-6 md:grid md:grid-cols-[1fr_1.5fr] md:gap-8 md:items-start">
-            <!-- Order 1: 單一整合控制台 -->
-            <div class="card order-1 bg-white/70 backdrop-blur-xl border border-white/60 rounded-2xl p-5 shadow-xl shadow-slate-200/50 md:col-start-1 md:row-start-1 flex flex-col justify-between">
-                <div>
-                    <!-- 分享與複製按鈕 (移到最上方) -->
-                    <div class="action-grid grid grid-cols-2 gap-[10px] mb-4 pb-4 border-b border-slate-200">
-                        <button
-                            class="btn bg-white text-slate-700 py-2.5 px-4 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-accent transition-all border border-slate-200 text-sm"
-                            onclick="app.openMap()">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="GMap" class="w-5 h-5"> Google Map
-                        </button>
-                        <button
-                            class="btn bg-white text-slate-700 py-2.5 px-4 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-copy transition-all border border-slate-200 text-sm"
-                            onclick="app.copy()">
-                            <i class="fa-regular fa-copy text-lg text-copy"></i> 複製資訊
-                        </button>
-                        <button
-                            class="btn bg-gradient-to-b from-[#38bdf8] to-[#0ea5e9] text-white py-2.5 px-4 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#0ea5e9]/30 transition-all border border-[#0284c7]/20 text-sm"
-                            onclick="app.share('tg')">
-                            <i class="fa-brands fa-telegram text-lg"></i> Telegram
-                        </button>
-                        <button
-                            class="btn bg-gradient-to-b from-[#4ade80] to-[#22c55e] text-white py-2.5 px-4 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-2 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#22c55e]/30 transition-all border border-[#16a34a]/20 text-sm"
-                            onclick="app.share('line')">
-                            <i class="fa-brands fa-line text-lg"></i> LINE
-                        </button>
-                    </div>
+    <!-- Order 1: 單一整合控制台 (懸浮面板) -->
+    <div id="consolePanel" class="console-panel card bg-white/80 backdrop-blur-xl border border-white/60 rounded-2xl p-5 shadow-2xl flex flex-col justify-between overflow-hidden">
+        <!-- 折疊切換外掛按鈕把手 -->
+        <button id="btnConsoleToggle" class="toggle-handle border-none outline-none animate-pulse" onclick="app.toggleConsoleSide()" title="收合/展開控制台">
+            <i class="fa-solid fa-chevron-left text-slate-500 text-[10px] transition-transform duration-300" id="consoleToggleArrow"></i>
+        </button>
+        
+        <!-- 內部可滾動容器 -->
+        <div class="flex-1 overflow-y-auto pr-1 space-y-4 max-h-full">
+            <!-- 標題區塊 (從外部移入，做在卡片頂端) -->
+            <div class="text-center pb-3 border-b border-slate-200 relative">
+                <h1 class="text-xl font-bold text-primary mb-1 flex justify-center items-center">
+                    <i class="fa-solid fa-user-shield mr-2"></i>手機門號即時定位
+                </h1>
+                <div class="flex justify-center items-center gap-2 text-[#7f8c8d] text-xs font-medium">
+                    <span>V2.0</span>
+                    <button id="btnToggleConfig"
+                        class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 flex items-center border-none bg-transparent cursor-pointer"
+                        title="進階設定">
+                        <i class="fa-solid fa-gear text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 分享與複製按鈕 (常駐於標題之下) -->
+            <div class="action-grid grid grid-cols-2 gap-[10px] pb-3 border-b border-slate-200">
+                <button
+                    class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-accent transition-all border border-slate-200 text-xs"
+                    onclick="app.openMap()">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="GMap" class="w-4 h-4"> Google Map
+                </button>
+                <button
+                    class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-copy transition-all border border-slate-200 text-xs"
+                    onclick="app.copy()">
+                    <i class="fa-regular fa-copy text-base text-copy"></i> 複製資訊
+                </button>
+                <button
+                    class="btn bg-gradient-to-b from-[#38bdf8] to-[#0ea5e9] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#0ea5e9]/30 transition-all border border-[#0284c7]/20 text-xs"
+                    onclick="app.share('tg')">
+                    <i class="fa-brands fa-telegram text-base"></i> Telegram
+                </button>
+                <button
+                    class="btn bg-gradient-to-b from-[#4ade80] to-[#22c55e] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#22c55e]/30 transition-all border border-[#16a34a]/20 text-xs"
+                    onclick="app.share('line')">
+                    <i class="fa-brands fa-line text-base"></i> LINE
+                </button>
+            </div>
                     <div class="hint text-center text-[0.85rem] text-slate-500 mb-[10px] font-medium">
                         <i class="fa-solid fa-wand-magic-sparkles text-accent"></i> 貼上整段文字，自動辨識座標與門號
                     </div>
@@ -423,25 +487,21 @@
                                 <ul id="list" class="m-0 p-0 list-none max-h-[180px] overflow-y-auto pr-1"></ul>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- Order 2: 地圖 (手機版在中間，電腦版在右側) -->
-            <div id="map-container"
-                class="order-2 w-full h-[400px] md:h-[calc(100vh-120px)] bg-white/70 backdrop-blur-xl border border-white/60 rounded-2xl shadow-xl shadow-slate-200/50 overflow-hidden md:col-start-2 md:row-start-1 md:sticky md:top-[90px] hidden md:block">
-                <div id="map" class="w-full h-full"></div>
-            </div>
-
-            <!-- Order 3: 底部區 (只保留頁尾以保持版面清爽，限制在左欄防地圖重疊) -->
-            <div class="order-3 md:col-start-1 md:col-span-1 w-full mt-4">
-                <div class="footer text-center text-[0.75rem] text-[#bdc3c7]">
-                    System initialized. Version 2.0<br>
-                    &copy; 2026 Cell Phone Locator. All rights reserved.
-                </div>
             </div>
         </div>
+
+        <!-- 頁尾區 (移入面板底部) -->
+        <div class="pt-3 border-t border-slate-200 mt-2">
+            <div class="footer text-center text-[10px] text-[#bdc3c7]">
+                System initialized. Version 2.0<br>
+                &copy; 2026 Cell Phone Locator. All rights reserved.
+            </div>
+        </div>
+    </div>
+
+    <!-- 地圖背景 (滿版鋪底) -->
+    <div id="map-container" class="w-screen h-screen fixed inset-0 z-0 bg-slate-100 overflow-hidden">
+        <div id="map" class="w-full h-full"></div>
     </div>
 
     <script src="js/app.js"></script>

@@ -917,6 +917,30 @@
                 }
             }
 
+            // 摺疊/展開左側懸浮控制台
+            function toggleConsoleSide() {
+                const el = document.getElementById("consolePanel");
+                const arrow = document.getElementById("consoleToggleArrow");
+                if (!el || !arrow) return;
+
+                const isCollapsed = el.classList.contains("collapsed");
+                if (isCollapsed) {
+                    el.classList.remove("collapsed");
+                    arrow.classList.remove("fa-chevron-right");
+                    arrow.classList.add("fa-chevron-left");
+                } else {
+                    el.classList.add("collapsed");
+                    arrow.classList.remove("fa-chevron-left");
+                    arrow.classList.add("fa-chevron-right");
+                }
+
+                if (map) {
+                    setTimeout(() => {
+                        map.invalidateSize();
+                    }, 350);
+                }
+            }
+
             // 公開介面 (Public API)
             return {
                 init,
@@ -933,6 +957,7 @@
                 toggleMapSelect,
                 clearAddress,
                 toggleSection,
+                toggleConsoleSide,
             };
         })();
 
