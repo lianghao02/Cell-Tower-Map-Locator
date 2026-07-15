@@ -10,8 +10,10 @@
      */
         const app = (function () {
             // 私有變數
-            let map, marker, sector;
-            // 資料模型 (包含 reqTime, regTime)
+            let map, marker, sector, addrMarker, relationLine;
+            let isMapSelectActive = false; // 地圖選點模式狀態
+            let currentHistoryId = null; // 當前歷史紀錄 ID 追蹤
+            // 資料模型 (包含 reqTime, regTime, 以及目標地址資料)
             let data = {
                 lat: null,
                 lng: null,
@@ -19,6 +21,9 @@
                 phone: "",
                 reqTime: "",
                 regTime: "",
+                addrName: "",
+                addrLat: null,
+                addrLng: null,
             };
             let history = [];
 
@@ -56,7 +61,7 @@
                     renderHistory();
 
                     // 監聽輸入框變更
-                    ["lat", "lng", "phone", "azi", "reqTime", "regTime"].forEach((id) => {
+                    ["lat", "lng", "phone", "azi", "reqTime", "regTime", "addrLat", "addrLng", "targetAddr"].forEach((id) => {
                         const el = document.getElementById(id);
                         if (el) el.addEventListener("change", () => updateFromInput(false));
                     });
@@ -85,6 +90,17 @@
                 if (params.has('phone')) data.phone = params.get('phone');
                 if (params.has('reqTime')) data.reqTime = params.get('reqTime');
                 if (params.has('regTime')) data.regTime = params.get('regTime');
+
+                // 解析目標地址關聯參數
+                if (params.has('addrLat') && params.has('addrLng')) {
+                    data.addrLat = parseFloat(params.get('addrLat'));
+                    data.addrLng = parseFloat(params.get('addrLng'));
+                } else {
+                    data.addrLat = null;
+                    data.addrLng = null;
+                }
+                if (params.has('addrName')) data.addrName = params.get('addrName');
+                else data.addrName = "";
 
                 if (hasData) {
                     syncUI();
@@ -194,6 +210,10 @@
                 }
 
                 if (data.lat !== null && data.lng !== null) {
+                    // 重新解析新簡訊時，清除舊有的地址資料以防混淆
+                    data.addrName = "";
+                    data.addrLat = null;
+                    data.addrLng = null;
                     syncUI();
                     updateMap(true); // true = 存入歷史
                 } else {
@@ -207,30 +227,167 @@
                 const lng = parseFloat(document.getElementById("lng").value);
                 const az = parseFloat(document.getElementById("azi").value);
                 const ph = document.getElementById("phone").value;
-                const req = document.getElementById("reqTime").value; // UI上已經是更動後的
+                const req = document.getElementById("reqTime").value;
                 const reg = document.getElementById("regTime").value;
+                
+                const addrLatVal = parseFloat(document.getElementById("addrLat").value);
+                const addrLngVal = parseFloat(document.getElementById("addrLng").value);
+                const addrNameVal = document.getElementById("targetAddr").value;
 
                 if (!isNaN(lat) && !isNaN(lng)) {
-                    data = {
-                        lat,
-                        lng,
-                        azi: isNaN(az) ? null : az,
-                        phone: ph,
-                        reqTime: req.replace(/-/g, "/"),
-                        regTime: reg.replace(/-/g, "/"),
-                    };
+                    data.lat = lat;
+                    data.lng = lng;
+                    data.azi = isNaN(az) ? null : az;
+                    data.phone = ph;
+                    data.reqTime = req.replace(/-/g, "/");
+                    data.regTime = reg.replace(/-/g, "/");
+                    data.addrLat = isNaN(addrLatVal) ? null : addrLatVal;
+                    data.addrLng = isNaN(addrLngVal) ? null : addrLngVal;
+                    data.addrName = addrNameVal || "";
+                    
                     updateMap(save);
                 }
             }
 
             // 更新 UI 顯示 (同步資料至輸入框)
             function syncUI() {
-                document.getElementById("lat").value = data.lat;
-                document.getElementById("lng").value = data.lng;
+                document.getElementById("lat").value = data.lat !== null ? data.lat : "";
+                document.getElementById("lng").value = data.lng !== null ? data.lng : "";
                 document.getElementById("azi").value = data.azi !== null ? data.azi : "";
                 document.getElementById("phone").value = data.phone;
                 document.getElementById("reqTime").value = data.reqTime;
                 document.getElementById("regTime").value = data.regTime;
+
+                document.getElementById("addrLat").value = data.addrLat !== null ? data.addrLat : "";
+                document.getElementById("addrLng").value = data.addrLng !== null ? data.addrLng : "";
+                document.getElementById("targetAddr").value = data.addrName;
+            }
+
+            // 計算航向角（相對方位角）
+            function calculateBearing(lat1, lng1, lat2, lng2) {
+                const dLng = (lng2 - lng1) * Math.PI / 180;
+                const rLat1 = lat1 * Math.PI / 180;
+                const rLat2 = lat2 * Math.PI / 180;
+                const y = Math.sin(dLng) * Math.cos(rLat2);
+                const x = Math.cos(rLat1) * Math.sin(rLat2) -
+                          Math.sin(rLat1) * Math.cos(rLat2) * Math.cos(dLng);
+                let brng = Math.atan2(y, x) * 180 / Math.PI;
+                return (brng + 360) % 360;
+            }
+
+            // 判斷相對角度是否在扇形夾角內 (考慮跨 360 度週期)
+            function isAngleWithinSector(angle, center, aperture) {
+                const half = aperture / 2;
+                let diff = Math.abs(angle - center) % 360;
+                if (diff > 180) {
+                    diff = 360 - diff;
+                }
+                return diff <= half;
+            }
+
+            // 非同步解析地址 (Geocoding)
+            function locateAddress() {
+                let addr = document.getElementById("targetAddr").value.trim();
+                if (!addr) return alert("請先輸入要定位的地址！");
+                
+                // 智慧模糊容錯 A：簡繁體轉譯
+                addr = addr.replace(/台/g, "臺");
+                
+                // 智慧模糊容錯 B：剔除詳細室內樓層或房號字尾，僅保留主建物門牌以增加搜尋命中率
+                let cleanAddr = addr.replace(/(?:\d+\s*[樓室Ff].*)$/g, "");
+                cleanAddr = cleanAddr.replace(/(?:[0-9一二三四五六七八九十百]+(?:樓|室|f|F|層).*)$/g, "");
+                
+                const btn = document.getElementById("btnLocateAddr");
+                const origIcon = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i>';
+
+                // 限制在台灣經緯度範圍內搜尋
+                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanAddr)}&format=json&limit=1&viewbox=118,21,124,27&bounded=1`;
+                
+                fetch(url, {
+                    headers: {
+                        "Accept-Language": "zh-TW,zh;q=0.9"
+                    }
+                })
+                .then(res => res.json())
+                .then(res => {
+                    btn.disabled = false;
+                    btn.innerHTML = origIcon;
+                    
+                    if (res && res.length > 0) {
+                        const result = res[0];
+                        data.addrLat = parseFloat(parseFloat(result.lat).toFixed(6));
+                        data.addrLng = parseFloat(parseFloat(result.lon).toFixed(6));
+                        
+                        // 擷取簡化地名 (避免過長)
+                        data.addrName = result.display_name.split(',')[0] || addr;
+                        
+                        syncUI();
+                        updateMap(false);
+                    } else {
+                        alert("找不到該地址的定位資訊。如果是偏鄉門牌，建議直接點擊「地圖選點」在地圖上手動點選！");
+                    }
+                })
+                .catch(err => {
+                    console.error("Geocoding error:", err);
+                    btn.disabled = false;
+                    btn.innerHTML = origIcon;
+                    alert("地址解析連線失敗，請檢查網路，或直接使用手動輸入座標 / 地圖選點功能。");
+                });
+            }
+
+            // 一鍵清除目標地址
+            function clearAddress() {
+                data.addrLat = null;
+                data.addrLng = null;
+                data.addrName = "";
+                
+                syncUI();
+                
+                // 若當前對應著某個歷史紀錄，同步清除該歷史紀錄的空間欄位
+                if (currentHistoryId !== null) {
+                    const idx = history.findIndex(h => h.id === currentHistoryId);
+                    if (idx !== -1) {
+                        history[idx].addrLat = null;
+                        history[idx].addrLng = null;
+                        history[idx].addrName = "";
+                        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+                        renderHistory();
+                    }
+                }
+                
+                updateMap(false);
+            }
+
+            // 切換地圖選點模式
+            function toggleMapSelect(e, forceState) {
+                if (e) e.preventDefault();
+                
+                if (forceState !== undefined) {
+                    isMapSelectActive = forceState;
+                } else {
+                    isMapSelectActive = !isMapSelectActive;
+                }
+                
+                const btn = document.getElementById("btnMapSelect");
+                const statusText = document.getElementById("mapSelectStatus");
+
+                if (isMapSelectActive) {
+                    btn.classList.remove("text-accent");
+                    btn.classList.add("text-orange-500", "font-bold");
+                    statusText.innerText = "請點擊地圖...";
+                    if (map) {
+                        map.getContainer().style.cursor = 'crosshair';
+                    }
+                } else {
+                    btn.classList.remove("text-orange-500", "font-bold");
+                    btn.classList.add("text-accent");
+                    statusText.innerText = "地圖選點";
+                    if (map) {
+                        map.getContainer().style.cursor = '';
+                    }
+                }
             }
 
             // 更新地圖與歷史紀錄
@@ -247,6 +404,19 @@
                     L.tileLayer(config.mapTileUrl, {
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     }).addTo(map);
+
+                    // 綁定地圖點擊事件 (選點模式)
+                    map.on("click", (e) => {
+                        if (!isMapSelectActive) return;
+                        
+                        data.addrLat = parseFloat(e.latlng.lat.toFixed(6));
+                        data.addrLng = parseFloat(e.latlng.lng.toFixed(6));
+                        data.addrName = "地圖自訂點";
+                        
+                        toggleMapSelect(null, false);
+                        syncUI();
+                        updateMap(false);
+                    });
                 } else {
                     map.panTo([data.lat, data.lng]); // 保留使用者縮放層級
                     // 確保地圖正確重繪 (需等待容器顯示後)
@@ -257,7 +427,7 @@
                 if (sector) map.removeLayer(sector);
 
                 // 地圖 Popup 顯示內容
-                let desc = `<b>📍 定位點</b><br>${data.lat}, ${data.lng}`;
+                let desc = `<b>📍 基地台定位點</b><br>${data.lat}, ${data.lng}`;
                 if (data.phone) desc += `<br>定位門號: ${data.phone}`;
                 if (data.reqTime) desc += `<br>🕒 請求: ${data.reqTime}`;
                 if (data.regTime) desc += `<br>📡 註冊: ${data.regTime}`;
@@ -294,6 +464,107 @@
                     }).addTo(map);
                 }
 
+                // --- 目標地址 / 位置關聯繪製 ---
+                if (addrMarker) map.removeLayer(addrMarker);
+                if (relationLine) map.removeLayer(relationLine);
+
+                const hasAddr = data.addrLat !== null && data.addrLng !== null;
+                const analysisPanel = document.getElementById("analysisPanel");
+
+                if (hasAddr) {
+                    // 1. 建立目標地址標記 (🏠 Pin)
+                    addrMarker = L.marker([data.addrLat, data.addrLng], {
+                        draggable: true,
+                        title: data.addrName || "目標位置"
+                    }).addTo(map);
+
+                    // 綁定拖曳結束事件
+                    addrMarker.on("dragend", function (e) {
+                        const latlng = e.target.getLatLng();
+                        data.addrLat = parseFloat(latlng.lat.toFixed(6));
+                        data.addrLng = parseFloat(latlng.lng.toFixed(6));
+                        if (!data.addrName) {
+                            data.addrName = "地圖自訂點";
+                        }
+                        syncUI();
+                        updateMap(false);
+                    });
+
+                    // 2. 計算距離與相對方位角
+                    const dist = Math.round(map.distance([data.lat, data.lng], [data.addrLat, data.addrLng]));
+                    const bearing = Math.round(calculateBearing(data.lat, data.lng, data.addrLat, data.addrLng));
+
+                    // 3. 判斷是否在發射扇形範圍內
+                    let isCovered = false;
+                    let coveredText = "⚠️ 未提供發射方位角";
+                    let coveredClass = "text-slate-500";
+                    let lineColor = "#64748b"; // 預設灰藍色
+
+                    if (data.azi !== null) {
+                        isCovered = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
+                        if (isCovered) {
+                            coveredText = "🎯 位於發射扇形內";
+                            coveredClass = "text-emerald-600";
+                            lineColor = "#10b981"; // 翠綠色
+                        } else {
+                            coveredText = "❌ 位於發射扇形外";
+                            coveredClass = "text-rose-600";
+                            lineColor = "#ef4444"; // 亮紅色
+                        }
+                    }
+
+                    // 4. 繪製虛線連線與動態 Tooltip
+                    relationLine = L.polyline([[data.lat, data.lng], [data.addrLat, data.addrLng]], {
+                        color: lineColor,
+                        weight: 2,
+                        dashArray: "6, 6"
+                    }).addTo(map);
+
+                    const tooltipContent = `📏 ${dist}公尺 / 🧭 方位:${bearing}°<br>${isCovered ? "🎯 覆蓋區內" : "❌ 覆蓋區外"}`;
+                    relationLine.bindTooltip(tooltipContent, {
+                        permanent: true,
+                        direction: "center",
+                        className: "relation-tooltip text-xs font-bold px-2 py-1 rounded shadow border-none bg-white/95 text-slate-800"
+                    }).openTooltip();
+
+                    // 5. 更新 Popup
+                    let addrDesc = `<b>🏠 目標地址 / 位置</b><br>${data.addrName || "自訂位置"}<br>${data.addrLat}, ${data.addrLng}`;
+                    addrMarker.bindPopup(addrDesc).openPopup();
+
+                    // 7. 智慧視野自動調焦 (僅在載入新定位時觸發，拖拽微調時不干擾)
+                    if (save) {
+                        const bounds = L.latLngBounds([[data.lat, data.lng], [data.addrLat, data.addrLng]]);
+                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                    }
+
+                    // 8. 更新空間關聯分析 UI 面板
+                    if (analysisPanel) {
+                        analysisPanel.classList.remove("hidden");
+                        document.getElementById("analysisDistance").innerText = `${dist} 公尺`;
+                        document.getElementById("analysisBearing").innerText = `${bearing}°`;
+                        
+                        const covEl = document.getElementById("analysisCoverage");
+                        covEl.className = "font-bold " + coveredClass;
+                        covEl.innerText = coveredText;
+                    }
+                } else {
+                    if (analysisPanel) {
+                        analysisPanel.classList.add("hidden");
+                    }
+                }
+
+                // 實時自動同步空間微調資訊至當前歷史紀錄中
+                if (!save && currentHistoryId !== null) {
+                    const idx = history.findIndex(h => h.id === currentHistoryId);
+                    if (idx !== -1) {
+                        history[idx].addrLat = data.addrLat;
+                        history[idx].addrLng = data.addrLng;
+                        history[idx].addrName = data.addrName;
+                        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+                        renderHistory();
+                    }
+                }
+
                 if (save) addHistory();
             }
 
@@ -306,21 +577,25 @@
                 else alert("無座標");
             }
 
-            // 產生應用程式分享連結
+            // 產生應用程式分享連結 (支援目標地址參數)
             function getAppLink() {
-                // 固定使用此 Github Pages 網址 (需配合 Repository 名稱)
                 const baseUrl = "https://lianghao02.github.io/Cell-Tower-Map-Locator/";
                 const params = new URLSearchParams();
                 if (data.lat !== null) params.append('lat', data.lat);
                 if (data.lng !== null) params.append('lng', data.lng);
-                if (data.azi !== null) params.append('azi', data.azi); // 修正：azi=0 也需帶入
+                if (data.azi !== null) params.append('azi', data.azi);
                 if (data.phone) params.append('phone', data.phone);
                 if (data.reqTime) params.append('reqTime', data.reqTime);
                 if (data.regTime) params.append('regTime', data.regTime);
+                
+                if (data.addrLat !== null) params.append('addrLat', data.addrLat);
+                if (data.addrLng !== null) params.append('addrLng', data.addrLng);
+                if (data.addrName) params.append('addrName', data.addrName);
+                
                 return baseUrl + "?" + params.toString();
             }
 
-            // 取得完整分享文字 (符合使用者要求的格式)
+            // 取得完整分享文字 (有/無地址動態修正)
             function getFullText() {
                 const mapUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`;
                 const appUrl = getAppLink();
@@ -330,10 +605,26 @@
                 if (data.reqTime) t += `定位時間: ${data.reqTime}\n`;
                 if (data.regTime) t += `註冊時間: ${data.regTime}\n`;
                 t += `定位經緯度: ${data.lat}, ${data.lng}`;
-                if (data.azi !== null) t += ` (方位:${data.azi})`; // 修正：azi=0 不應被忽略
+                if (data.azi !== null) t += ` (方位:${data.azi})`;
+
+                // 若有提供地址資訊，修正輸出文字，加上比對結果
+                if (data.addrLat !== null && data.addrLng !== null) {
+                    const dist = Math.round(map.distance([data.lat, data.lng], [data.addrLat, data.addrLng]));
+                    const bearing = Math.round(calculateBearing(data.lat, data.lng, data.addrLat, data.addrLng));
+                    let coveredStatus = "未提供發射方位角";
+                    if (data.azi !== null) {
+                        const isCovered = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
+                        coveredStatus = isCovered ? "🎯 位於發射扇形範圍內" : "❌ 位於發射扇形範圍外";
+                    }
+
+                    t += `\n\n🏠 目標關連位置: ${data.addrName || "自訂位置"}`;
+                    t += `\n📍 目標經緯度: ${data.addrLat}, ${data.addrLng}`;
+                    t += `\n📏 直線距離: 約 ${dist} 公尺`;
+                    t += `\n🧭 相對方位角: ${bearing}° (${coveredStatus})`;
+                }
 
                 // 加上專用連結
-                t += `\n\n📌 專用圖台 (含扇形):\n${appUrl}`;
+                t += `\n\n📌 專用圖台 (含扇形與地址):\n${appUrl}`;
 
                 return t;
             }
@@ -356,7 +647,6 @@
             }
 
             function fallbackCopy(text) {
-                // 嘗試使用 execCommand (legacy)，若失敗則提示手動複製
                 try {
                     const ta = document.createElement("textarea");
                     ta.value = text;
@@ -372,17 +662,16 @@
                 }
             }
 
+            // LINE & Telegram 分享
             function share(type) {
                 if (data.lat === null) return alert("無座標");
                 const t = getFullText();
                 const mapUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`; // 用於 Telegram 按鈕連結
 
                 let url = "";
-                // LINE: 傳送完整文字
                 if (type === "line") {
                     url = `https://line.me/R/msg/text/?${encodeURIComponent(t)}`;
                 }
-                // Telegram: url 參數放地圖連結，text 放其餘資訊 (避免重複)
                 else {
                     const textBody = t.replace(mapUrl + "\n", "");
                     url = `https://t.me/share/url?url=${encodeURIComponent(
@@ -390,7 +679,6 @@
                     )}&text=${encodeURIComponent(textBody)}`;
                 }
 
-                // 檢測是否為行動裝置
                 const isMobile =
                     /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
                         navigator.userAgent
@@ -403,7 +691,7 @@
                 }
             }
 
-            // 貼上功能 (使用 Promise)
+            // 貼上功能
             function pasteInput() {
                 if (navigator.clipboard && navigator.clipboard.readText) {
                     navigator.clipboard
@@ -428,35 +716,55 @@
             // 歷史紀錄管理
             function addHistory() {
                 const now = new Date().toLocaleString("zh-TW", { hour12: false });
-                // 避免重複存入完全相同的資料
                 const isDup = history.some(
                     (h) =>
                         h.lat === data.lat &&
                         h.lng === data.lng &&
                         h.phone === data.phone &&
                         h.reqTime === data.reqTime &&
-                        h.regTime === data.regTime
+                        h.regTime === data.regTime &&
+                        h.addrLat === data.addrLat &&
+                        h.addrLng === data.addrLng
                 );
-                if (isDup) return;
+                if (isDup) {
+                    const dupItem = history.find(
+                        (h) =>
+                            h.lat === data.lat &&
+                            h.lng === data.lng &&
+                            h.phone === data.phone &&
+                            h.reqTime === data.reqTime &&
+                            h.regTime === data.regTime &&
+                            h.addrLat === data.addrLat &&
+                            h.addrLng === data.addrLng
+                    );
+                    if (dupItem) currentHistoryId = dupItem.id;
+                    return;
+                }
 
+                const newId = Date.now();
                 history.unshift({
-                    id: Date.now(),
+                    id: newId,
                     time: now,
                     ...data,
                 });
-                if (history.length > config.historyLimit) history.pop(); // 使用配置上限
+                currentHistoryId = newId;
+                if (history.length > config.historyLimit) history.pop();
                 saveHistory();
             }
 
             function deleteItem(id, e) {
                 e.stopPropagation();
                 history = history.filter((x) => x.id !== id);
+                if (currentHistoryId === id) currentHistoryId = null;
                 saveHistory();
             }
 
-            function clearHistory() {
+            // 清除歷史紀錄
+            function clearHistory(e) {
+                if (e) e.stopPropagation();
                 if (confirm("確定清空紀錄？")) {
                     history = [];
+                    currentHistoryId = null;
                     saveHistory();
                 }
             }
@@ -478,7 +786,6 @@
                     const li = document.createElement("li");
                     li.className =
                         "bg-white/80 rounded-xl p-4 mb-3 shadow-sm border border-slate-100 relative cursor-pointer hover:bg-white hover:border-accent/40 hover:shadow-md hover:-translate-y-0.5 transition-all group";
-                    // 使用 esc() 對使用者輸入資料做 HTML 轉義 (防 XSS)
                     li.innerHTML = `
                     <div class="text-[0.75rem] font-medium text-slate-400 mb-[6px]">${esc(item.time)}</div>
                     <div class="flex items-center gap-2 mb-[6px]">
@@ -497,6 +804,10 @@
                                 ? `<div class="text-[0.8rem] text-slate-500 flex items-center gap-1.5"><i class="fa-regular fa-compass text-slate-400 w-3"></i> 方位: <span class="text-accent font-medium">${item.azi}°</span></div>`
                                 : ""
                             }
+                        ${item.addrLat !== null && item.addrLng !== null && item.addrLat !== undefined
+                                ? `<div class="text-[0.8rem] text-orange-600 flex items-center gap-1.5"><i class="fa-solid fa-house text-orange-400 w-3"></i> 關聯: <span class="font-medium">${esc(item.addrName || "自訂點")}</span></div>`
+                                : ""
+                            }
                     </div>
                     <button class="absolute top-[14px] right-[14px] text-slate-300 p-1 hover:text-del hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100" onclick="app.deleteItem(${item.id}, event)" title="刪除紀錄">
                         <i class="fa-solid fa-xmark"></i>
@@ -510,7 +821,11 @@
                             phone: item.phone,
                             reqTime: item.reqTime,
                             regTime: item.regTime,
+                            addrLat: item.addrLat !== undefined ? item.addrLat : null,
+                            addrLng: item.addrLng !== undefined ? item.addrLng : null,
+                            addrName: item.addrName !== undefined ? item.addrName : "",
                         };
+                        currentHistoryId = item.id;
                         syncUI();
                         updateMap(false);
                     };
@@ -584,6 +899,24 @@
                 }
             }
 
+            // 折疊控制台區塊切換
+            function toggleSection(id, btn) {
+                const el = document.getElementById(id);
+                if (!el) return;
+
+                const isExpanded = el.classList.contains("expanded");
+                if (isExpanded) {
+                    el.classList.remove("expanded");
+                    btn.classList.remove("active");
+                } else {
+                    el.classList.add("expanded");
+                    btn.classList.add("active");
+                    if (id === 'secHistory') {
+                        renderHistory();
+                    }
+                }
+            }
+
             // 公開介面 (Public API)
             return {
                 init,
@@ -596,6 +929,10 @@
                 deleteItem,
                 pasteInput,
                 clearInput,
+                locateAddress,
+                toggleMapSelect,
+                clearAddress,
+                toggleSection,
             };
         })();
 
