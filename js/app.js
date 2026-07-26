@@ -11,9 +11,10 @@
         const app = (function () {
             // 私有變數
             let map, marker, sector, addrMarker, relationLine;
+            let multiTowerLayers = []; // 多點模式圖層集合 (Markers, Polygons, PathLines)
             let isMapSelectActive = false; // 地圖選點模式狀態
             let currentHistoryId = null; // 當前歷史紀錄 ID 追蹤
-            // 資料模型 (包含 reqTime, regTime, 以及目標地址資料)
+            // 資料模型 (包含 reqTime, regTime, 以及目標地址資料與多點 towers)
             let data = {
                 lat: null,
                 lng: null,
@@ -25,6 +26,7 @@
                 addrLat: null,
                 addrLng: null,
                 searchQuery: "",
+                towers: [], // 支援最多 5 筆多點軌跡資料陣列 [{lat, lng, azi, phone, reqTime, regTime}, ...]
             };
             let history = [];
 
@@ -43,6 +45,9 @@
                 sectorAperture: 60,     // 扇形夾角 (度)
                 defaultZoom: 16,        // 預設縮放層級
                 historyLimit: 50,       // 歷史紀錄上限
+                maxBatchLimit: 5,       // 批量解析最多上限 (筆)
+                sectorColor: "#2563eb",  // 扇形統一寶藍色
+                sectorFillOpacity: 0.15,// 15% 晶透透明度 (重疊自動加深不蓋圖)
                 mapTileUrl: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
                 boundsLatMin: 21,       // 台灣經緯度界線 (Lat Min)
                 boundsLatMax: 27,
@@ -138,103 +143,171 @@
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
             }
 
-            // 核心解析邏輯
+            // 核心解析邏輯 (支援多筆段落切割 Block Splitting 與 5 筆上限截取)
             function parse() {
                 const text = document.getElementById("rawInput").value;
                 if (!text) return alert("請先貼上內容！");
 
-                // 1. 抓門號 (09xx 或 8869xx)
-                // 增加對 "行動電話號碼：" 後換行的支援，以及一般格式
+                // 1. 全局抓取門號 (作為預設 fallback)
+                let globalPhone = "";
                 const phMatch = text.match(
                     /(?:行動電話號碼|門號)[：:\s]*\n*([0-9]+)/
                 ) || text.match(
                     /(?:[^0-9\.]|^)(09\d{8}|8869\d{8})(?:[^0-9\.]|$)/
                 );
-
                 if (phMatch) {
                     let ph = phMatch[1];
-                    // 如果是抓到 886 開頭，轉 09
                     if (ph.startsWith("886")) ph = "0" + ph.substring(3);
-                    // 簡單驗證長度 (至少8碼)
-                    if (ph.length >= 8) data.phone = ph;
+                    if (ph.length >= 8) globalPhone = ph;
                 }
 
-                // 2. 抓時間 (定位請求 & 註冊基地台)
-                // 格式支援：yyyy/MM/dd 或 yyyy-MM-dd
-                const timePattern =
-                    "(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}:\\d{1,2})";
+                // 2. 段落切割 (Block Splitting)
+                // 優先使用雙換行分割，若無則按定位關鍵字分割
+                let rawBlocks = text.split(/\n\s*\n+/);
+                if (rawBlocks.length <= 1) {
+                    // 若無雙換行，依關鍵字分割
+                    rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g);
+                }
 
-                // 定位請求時間 (增加 "定位請求的時間")
-                const reqMatch = text.match(
-                    new RegExp(
-                        `(?:定位請求|Positioning Request)[^:：\\d]*[:：]?\\s*${timePattern}`
-                    )
-                );
-                data.reqTime = reqMatch ? reqMatch[1].replace(/-/g, "/") : "";
+                const parsedList = [];
+                const timePattern = "(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}:\\d{1,2})";
 
-                // 註冊基地台時間 (增加 "註冊基地臺時間", "最後註冊時間")
-                const regMatch = text.match(
-                    new RegExp(
-                        `(?:註冊基地|最後註冊|Base Station Reg)[^:：\\d]*[:：]?\\s*${timePattern}`
-                    )
-                );
-                data.regTime = regMatch ? regMatch[1].replace(/-/g, "/") : "";
+                rawBlocks.forEach((block) => {
+                    if (!block.trim()) return;
 
-                // 3. 抓方位角 (增加 "方向角", "天線方位角")
-                const azMatch = text.match(
-                    /(?:方位|方向|Dir|Azimuth)[^0-9\n]*([0-9]+(?:\.[0-9]+)?)/i
-                );
-                data.azi = azMatch ? parseFloat(azMatch[1]) : null;
-
-                // 4. 抓座標 (優化版：優先匹配成對座標)
-                // 支援 "細胞經度", "細胞緯度"
-                // 台灣範圍：Lat 21-27, Lng 118-124
-
-                // 模式 A: 嘗試抓取成對的座標
-                const pairMatch =
-                    text.match(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/) ||
-                    text.match(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/);
-
-                if (pairMatch) {
-                    const v1 = parseFloat(pairMatch[1]);
-                    const v2 = parseFloat(pairMatch[2]);
-                    if (v1 < 100) {
-                        data.lat = v1; data.lng = v2;
-                    } else {
-                        data.lng = v1; data.lat = v2;
+                    // A. 抓門號
+                    let blockPhone = globalPhone;
+                    const bPh = block.match(/(?:行動電話號碼|門號)[：:\s]*\n*([0-9]+)/) || block.match(/(?:[^0-9\.]|^)(09\d{8}|8869\d{8})(?:[^0-9\.]|$)/);
+                    if (bPh) {
+                        let p = bPh[1];
+                        if (p.startsWith("886")) p = "0" + p.substring(3);
+                        if (p.length >= 8) blockPhone = p;
                     }
-                } else {
-                    // 模式 B: 個別關鍵字搜尋 (細胞經度/緯度)
-                    const latKeyMatch = text.match(/(?:緯度|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
-                    const lngKeyMatch = text.match(/(?:經度|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
 
-                    if (latKeyMatch && lngKeyMatch) {
-                        data.lat = parseFloat(latKeyMatch[1]);
-                        data.lng = parseFloat(lngKeyMatch[1]);
+                    // B. 抓時間
+                    const reqM = block.match(new RegExp(`(?:定位請求|Positioning Request)[^:：\\d]*[:：]?\\s*${timePattern}`));
+                    const reqTime = reqM ? reqM[1].replace(/-/g, "/") : "";
+
+                    const regM = block.match(new RegExp(`(?:註冊基地|最後註冊|Base Station Reg)[^:：\\d]*[:：]?\\s*${timePattern}`));
+                    const regTime = regM ? regM[1].replace(/-/g, "/") : "";
+
+                    // C. 抓方位角
+                    const azM = block.match(/(?:方位|方向|Dir|Azimuth)[^0-9\n]*([0-9]+(?:\.[0-9]+)?)/i);
+                    const azi = azM ? parseFloat(azM[1]) : null;
+
+                    // D. 抓經緯度
+                    let bLat = null, bLng = null;
+
+                    // 模式 A: 成對座標
+                    const pairMatch = block.match(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/) ||
+                                      block.match(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/);
+
+                    if (pairMatch) {
+                        const v1 = parseFloat(pairMatch[1]);
+                        const v2 = parseFloat(pairMatch[2]);
+                        if (v1 < 100) { bLat = v1; bLng = v2; }
+                        else { bLng = v1; bLat = v2; }
                     } else {
-                        // 模式 C: 暴力搜尋符合範圍的數字
-                        const allNums = text.match(/[0-9]+\.[0-9]+/g);
-                        if (allNums) {
-                            for (let n of allNums) {
-                                const val = parseFloat(n);
-                                if (val >= config.boundsLatMin && val <= config.boundsLatMax && !data.lat) data.lat = val;
-                                else if (val >= config.boundsLngMin && val <= config.boundsLngMax && !data.lng) data.lng = val;
-                            }
+                        // 模式 B: 關鍵字
+                        const latM = block.match(/(?:緯度|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
+                        const lngM = block.match(/(?:經度|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
+                        if (latM && lngM) {
+                            bLat = parseFloat(latM[1]);
+                            bLng = parseFloat(lngM[1]);
                         }
                     }
+
+                    // 驗證經緯度是否在台灣合理範圍內
+                    if (bLat !== null && bLng !== null &&
+                        bLat >= config.boundsLatMin && bLat <= config.boundsLatMax &&
+                        bLng >= config.boundsLngMin && bLng <= config.boundsLngMax) {
+                        
+                        // 避免重複加入
+                        const isDup = parsedList.some(item => 
+                            Math.abs(item.lat - bLat) < 0.00001 && 
+                            Math.abs(item.lng - bLng) < 0.00001 &&
+                            item.reqTime === reqTime
+                        );
+                        
+                        if (!isDup) {
+                            parsedList.push({
+                                lat: bLat,
+                                lng: bLng,
+                                azi: azi,
+                                phone: blockPhone,
+                                reqTime: reqTime,
+                                regTime: regTime
+                            });
+                        }
+                    }
+                });
+
+                // 若段落分割未找到，嘗試全文備用成對搜尋 (全域捕捉)
+                if (parsedList.length === 0) {
+                    const globalPairs = [...text.matchAll(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/g)];
+                    globalPairs.forEach(m => {
+                        const v1 = parseFloat(m[1]), v2 = parseFloat(m[2]);
+                        const lat = v1 < 100 ? v1 : v2;
+                        const lng = v1 < 100 ? v2 : v1;
+                        if (!parsedList.some(x => x.lat === lat && x.lng === lng)) {
+                            parsedList.push({
+                                lat, lng, azi: null, phone: globalPhone, reqTime: "", regTime: ""
+                            });
+                        }
+                    });
                 }
 
-                if (data.lat !== null && data.lng !== null) {
-                    // 重新解析新簡訊時，清除舊有的地址資料以防混淆
-                    data.addrName = "";
-                    data.addrLat = null;
-                    data.addrLng = null;
-                    syncUI();
-                    updateMap(true, "base"); // true = 存入歷史
-                    switchTab('base'); // 自動切換至定位資料分頁
-                } else {
-                    alert("找不到有效的台灣座標數值，請確認內容。");
+                if (parsedList.length === 0) {
+                    return alert("找不到有效的台灣座標數值，請確認內容。");
                 }
+
+                // 3. 時間排序 (如果有時間資訊，依請求時間由舊到新排序)
+                parsedList.sort((a, b) => {
+                    if (a.reqTime && b.reqTime) {
+                        return new Date(a.reqTime) - new Date(b.reqTime);
+                    }
+                    return 0;
+                });
+
+                // 4. 5 筆上限截取與提示控制
+                const originalCount = parsedList.length;
+                let finalTowers = parsedList;
+
+                const batchNotice = document.getElementById("batchNotice");
+                const batchNoticeText = document.getElementById("batchNoticeText");
+
+                if (originalCount > config.maxBatchLimit) {
+                    finalTowers = parsedList.slice(0, config.maxBatchLimit);
+                    if (batchNotice && batchNoticeText) {
+                        batchNotice.classList.remove("hidden");
+                        batchNoticeText.innerText = `偵測到 ${originalCount} 筆定位資料，已為您載入前 ${config.maxBatchLimit} 筆軌跡。`;
+                    }
+                } else if (originalCount > 1) {
+                    if (batchNotice && batchNoticeText) {
+                        batchNotice.classList.remove("hidden");
+                        batchNoticeText.innerText = `成功解析出 ${originalCount} 筆定位軌跡（已按時間順序排列）。`;
+                    }
+                } else {
+                    if (batchNotice) batchNotice.classList.add("hidden");
+                }
+
+                // 5. 更新模型與 UI
+                data.towers = finalTowers;
+                data.lat = finalTowers[0].lat;
+                data.lng = finalTowers[0].lng;
+                data.azi = finalTowers[0].azi;
+                data.phone = finalTowers[0].phone;
+                data.reqTime = finalTowers[0].reqTime;
+                data.regTime = finalTowers[0].regTime;
+
+                // 清除舊目標地址
+                data.addrName = "";
+                data.addrLat = null;
+                data.addrLng = null;
+
+                syncUI();
+                updateMap(true, finalTowers.length > 1 ? "bounds" : "base"); // true = 存入歷史
+                switchTab('base'); // 自動切換至定位資料分頁
             }
 
             // 從輸入框更新資料
@@ -425,26 +498,103 @@
                 }
             }
 
-            // 更新地圖與歷史紀錄
+            // 渲染多點時間軸清單 (Tab 2)
+            function renderMultiTowerList() {
+                const container = document.getElementById("multiTowerContainer");
+                const singleForm = document.getElementById("singleTowerForm");
+                const listEl = document.getElementById("multiTowerList");
+                const countEl = document.getElementById("multiTowerCount");
+                const tabLabel = document.getElementById("tab-label-base");
+
+                const towers = data.towers || [];
+
+                if (towers.length <= 1) {
+                    if (container) container.classList.add("hidden");
+                    if (singleForm) singleForm.classList.remove("hidden");
+                    if (tabLabel) tabLabel.innerText = "定位資料";
+                    return;
+                }
+
+                if (container) container.classList.remove("hidden");
+                if (singleForm) singleForm.classList.add("hidden");
+                if (countEl) countEl.innerText = towers.length;
+                if (tabLabel) tabLabel.innerText = `軌跡資料 (${towers.length})`;
+
+                if (listEl) {
+                    listEl.innerHTML = "";
+                    towers.forEach((t, i) => {
+                        const num = i + 1;
+                        const item = document.createElement("div");
+                        item.className = "bg-white/90 border border-slate-200 rounded-xl p-2.5 shadow-sm hover:border-accent hover:shadow-md transition-all cursor-pointer space-y-1 text-xs group";
+                        item.onclick = () => focusTower(i);
+
+                        item.innerHTML = `
+                            <div class="flex justify-between items-center font-bold text-slate-800">
+                                <span class="flex items-center gap-1.5">
+                                    <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-mono shadow-sm font-bold">${num}</span>
+                                    <span class="font-mono text-primary">${t.lat}, ${t.lng}</span>
+                                </span>
+                                ${t.azi !== null && t.azi !== undefined ? `<span class="text-[10px] text-accent font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">🧭 ${t.azi}°</span>` : ""}
+                            </div>
+                            <div class="flex justify-between items-center text-[11px] text-slate-500 font-mono">
+                                <span>${t.reqTime ? `🕒 ${esc(t.reqTime)}` : (t.phone ? `📱 ${esc(t.phone)}` : '點位 ' + num)}</span>
+                                <span class="text-accent opacity-0 group-hover:opacity-100 transition-opacity">對焦 <i class="fa-solid fa-arrow-right"></i></span>
+                            </div>
+                        `;
+                        listEl.appendChild(item);
+                    });
+                }
+            }
+
+            // 多點點擊平移對焦
+            function focusTower(idx) {
+                if (!data.towers || !data.towers[idx]) return;
+                const t = data.towers[idx];
+                if (map) {
+                    map.setView([t.lat, t.lng], 18);
+                }
+            }
+
+            // 更新地圖與歷史紀錄 (v3.1 多點軌跡與寶藍清透扇形疊加)
             function updateMap(save, focusType) {
                 const mapDiv = document.getElementById("map");
                 const mapContainer = document.getElementById("map-container");
 
-                // 使用 Tailwind 類別控制顯示
                 mapDiv.classList.remove("hidden");
                 if (mapContainer) mapContainer.classList.remove("hidden");
 
-                const hasBase = data.lat !== null && data.lng !== null;
+                // 清除過往多點圖層
+                multiTowerLayers.forEach(l => {
+                    if (map && l) map.removeLayer(l);
+                });
+                multiTowerLayers = [];
+
+                if (marker) { map.removeLayer(marker); marker = null; }
+                if (sector) { map.removeLayer(sector); sector = null; }
+
+                // 確保相容 single / multi towers
+                let towers = data.towers && data.towers.length > 0 ? data.towers : [];
+                if (towers.length === 0 && data.lat !== null && data.lng !== null) {
+                    towers = [{
+                        lat: data.lat, lng: data.lng, azi: data.azi,
+                        phone: data.phone, reqTime: data.reqTime, regTime: data.regTime
+                    }];
+                    data.towers = towers;
+                }
+
+                renderMultiTowerList();
+
+                const hasBase = towers.length > 0;
                 const hasAddr = data.addrLat !== null && data.addrLng !== null;
 
-                // 智慧判定地圖初始化時的預設中心點與 Zoom
-                let centerLat = 23.6978; // 預設台灣中心
+                // 智慧中心點計算
+                let centerLat = 23.6978;
                 let centerLng = 120.9605;
-                let defaultZoom = 8;     // 台灣全圖縮放
+                let defaultZoom = 8;
 
                 if (hasBase) {
-                    centerLat = data.lat;
-                    centerLng = data.lng;
+                    centerLat = towers[0].lat;
+                    centerLng = towers[0].lng;
                     defaultZoom = config.defaultZoom;
                 } else if (hasAddr) {
                     centerLat = data.addrLat;
@@ -456,83 +606,114 @@
                     map = L.map("map", { maxZoom: 22 }).setView([centerLat, centerLng], defaultZoom);
                     L.tileLayer(config.mapTileUrl, {
                         maxZoom: 22,
-                        maxNativeZoom: 19, // OSM 最大原生瓦片級數為 19 級，超過 19 級時由 Leaflet 進行插值放大以防破圖
+                        maxNativeZoom: 19,
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     }).addTo(map);
 
-                    // 綁定地圖點擊事件 (選點模式)
                     map.on("click", (e) => {
                         if (!isMapSelectActive) return;
-                        
                         data.addrLat = parseFloat(e.latlng.lat.toFixed(6));
                         data.addrLng = parseFloat(e.latlng.lng.toFixed(6));
                         data.addrName = "地圖自訂點";
-                        data.searchQuery = ""; // 地圖自訂點，清除查詢詞檢驗
-                        
+                        data.searchQuery = "";
                         toggleMapSelect(null, false);
                         syncUI();
                         updateMap(false, "addr");
-                        switchTab('compare'); // 自動切換至空間對比分頁
+                        switchTab('compare');
                     });
                 } else {
-                    // 若無特別指定對焦，只做尺寸刷新，避免干擾使用者拖曳與平移視角
                     if (!focusType) {
                         setTimeout(() => map.invalidateSize(), 100);
                     }
                 }
 
-                // 實施智慧 Pan & Zoom 對焦引擎
-                if (map && focusType) {
-                    if (focusType === "base" && hasBase) {
-                        map.setView([data.lat, data.lng], 18);
-                    } else if (focusType === "addr" && hasAddr) {
-                        map.setView([data.addrLat, data.addrLng], 18);
-                    } else if (focusType === "bounds" && hasBase && hasAddr) {
-                        const bounds = L.latLngBounds([[data.lat, data.lng], [data.addrLat, data.addrLng]]);
-                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
-                    } else {
-                        // 兜底對焦
-                        map.setView([centerLat, centerLng], (hasBase || hasAddr) ? 18 : 8);
+                // 收集所有點位計算 Bounds
+                const allCoords = [];
+                if (hasAddr) allCoords.push([data.addrLat, data.addrLng]);
+
+                // --- 1. 繪製基地台點位與寶藍清透扇形 ---
+                if (hasBase) {
+                    towers.forEach((t, i) => {
+                        allCoords.push([t.lat, t.lng]);
+
+                        let popupText = `<b>📍 基地台點位 #${i + 1}</b><br>${t.lat}, ${t.lng}`;
+                        if (t.phone) popupText += `<br>門號: ${t.phone}`;
+                        if (t.reqTime) popupText += `<br>🕒 請求: ${t.reqTime}`;
+                        if (t.regTime) popupText += `<br>📡 註冊: ${t.regTime}`;
+                        if (t.azi !== null) popupText += `<br>🧭 方位: ${t.azi}°`;
+
+                        let m;
+                        if (towers.length > 1) {
+                            // 多點模式：使用帶號碼的數字圓圈 Badge Icon
+                            const badgeHtml = `<div class="w-6 h-6 rounded-full bg-blue-600 border-2 border-white text-white font-mono font-bold text-xs flex items-center justify-center shadow-md">${i + 1}</div>`;
+                            const customIcon = L.divIcon({
+                                html: badgeHtml,
+                                className: 'custom-badge-icon',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 12]
+                            });
+                            m = L.marker([t.lat, t.lng], { icon: customIcon }).addTo(map).bindPopup(popupText);
+                        } else {
+                            // 單點模式
+                            m = L.marker([t.lat, t.lng]).addTo(map).bindPopup(popupText);
+                            if (i === 0) m.openPopup();
+                        }
+                        multiTowerLayers.push(m);
+
+                        // 繪製寶藍色 15% 清透扇形 (Alpha 疊加，重疊區域自動加深色調不蓋圖)
+                        if (t.azi !== null && t.azi !== undefined) {
+                            const r = config.sectorRadius;
+                            const halfApp = config.sectorAperture / 2;
+                            const startAngle = (t.azi - halfApp) * (Math.PI / 180);
+                            const endAngle = (t.azi + halfApp) * (Math.PI / 180);
+                            const points = [[t.lat, t.lng]];
+
+                            for (let k = 0; k <= 20; k++) {
+                                const angle = startAngle + (endAngle - startAngle) * (k / 20);
+                                const dLat = (r / 111320) * Math.cos(angle);
+                                const dLng = (r / (111320 * Math.cos(t.lat * (Math.PI / 180)))) * Math.sin(angle);
+                                points.push([t.lat + dLat, t.lng + dLng]);
+                            }
+                            points.push([t.lat, t.lng]);
+
+                            const secPoly = L.polygon(points, {
+                                color: config.sectorColor,       // #2563eb 寶藍色
+                                fillColor: config.sectorColor,
+                                fillOpacity: config.sectorFillOpacity, // 0.15 清透疊加
+                                weight: 1.5,
+                                opacity: 0.6
+                            }).addTo(map);
+
+                            multiTowerLayers.push(secPoly);
+                        }
+                    });
+
+                    // 繪製多點軌跡連線 (Polyline Path)
+                    if (towers.length > 1) {
+                        const pathCoords = towers.map(t => [t.lat, t.lng]);
+                        const pathLine = L.polyline(pathCoords, {
+                            color: "#2563eb",
+                            weight: 3,
+                            dashArray: "6, 6",
+                            opacity: 0.8
+                        }).addTo(map);
+
+                        pathLine.bindTooltip("👣 定位移動軌跡線", { permanent: false, direction: "center" });
+                        multiTowerLayers.push(pathLine);
                     }
                 }
 
-                // --- 1. 繪製基地台 Marker ---
-                if (marker) map.removeLayer(marker);
-                if (sector) map.removeLayer(sector);
-
-                if (hasBase) {
-                    let desc = `<b>📍 基地台定位點</b><br>${data.lat}, ${data.lng}`;
-                    if (data.phone) desc += `<br>定位門號: ${data.phone}`;
-                    if (data.reqTime) desc += `<br>🕒 請求: ${data.reqTime}`;
-                    if (data.regTime) desc += `<br>📡 註冊: ${data.regTime}`;
-                    if (data.azi !== null) desc += `<br>🧭 方位: ${data.azi}°`;
-
-                    marker = L.marker([data.lat, data.lng])
-                        .addTo(map)
-                        .bindPopup(desc)
-                        .openPopup();
-
-                    // 繪製發射方位扇形
-                    if (data.azi !== null) {
-                        const r = config.sectorRadius; // 半徑 (米)
-                        const halfApp = config.sectorAperture / 2;
-                        const startAngle = (data.azi - halfApp) * (Math.PI / 180);
-                        const endAngle = (data.azi + halfApp) * (Math.PI / 180);
-                        const points = [[data.lat, data.lng]];
-
-                        for (let i = 0; i <= 20; i++) {
-                            const angle = startAngle + (endAngle - startAngle) * (i / 20);
-                            const dLat = (r / 111320) * Math.cos(angle);
-                            const dLng = (r / (111320 * Math.cos(data.lat * (Math.PI / 180)))) * Math.sin(angle);
-                            points.push([data.lat + dLat, data.lng + dLng]);
-                        }
-                        points.push([data.lat, data.lng]);
-
-                        sector = L.polygon(points, {
-                            color: "red",
-                            fillOpacity: 0.1,
-                            weight: 1,
-                        }).addTo(map);
+                // 智慧 Focus 對焦引擎
+                if (map && focusType) {
+                    if (focusType === "base" && hasBase) {
+                        map.setView([towers[0].lat, towers[0].lng], 18);
+                    } else if (focusType === "addr" && hasAddr) {
+                        map.setView([data.addrLat, data.addrLng], 18);
+                    } else if (focusType === "bounds" && allCoords.length > 1) {
+                        const bounds = L.latLngBounds(allCoords);
+                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                    } else {
+                        map.setView([centerLat, centerLng], (hasBase || hasAddr) ? 18 : 8);
                     }
                 }
 

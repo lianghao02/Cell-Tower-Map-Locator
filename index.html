@@ -253,7 +253,7 @@
                 <div class="flex justify-between items-center pb-3 border-b border-slate-200/60 mb-3">
                     <div class="flex items-center gap-2">
                         <i class="fa-solid fa-user-shield text-accent text-lg animate-pulse"></i>
-                        <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.0</span></h1>
+                        <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.1</span></h1>
                     </div>
                     <button id="btnToggleConfig" class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 border-none bg-transparent cursor-pointer flex items-center" title="進階設定">
                         <i class="fa-solid fa-gear text-base"></i>
@@ -266,7 +266,7 @@
                         <i class="fa-solid fa-bolt text-sm"></i><span>智慧解析</span>
                     </button>
                     <button onclick="app.switchTab('base')" id="tab-btn-base" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
-                        <i class="fa-solid fa-tower-cell text-sm"></i><span>定位資料</span>
+                        <i class="fa-solid fa-tower-cell text-sm"></i><span id="tab-label-base">定位資料</span>
                     </button>
                     <button onclick="app.switchTab('compare')" id="tab-btn-compare" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
                         <i class="fa-solid fa-house-laptop text-sm"></i><span>空間對比</span>
@@ -286,7 +286,13 @@
                         </div>
                         <textarea id="rawInput"
                             class="smart-area w-full border border-slate-300 rounded-xl p-3 text-xs font-mono transition-all bg-white/90 h-[90px] focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white focus:outline-none mb-1 shadow-inner"
-                            placeholder="長按貼上... (支援 LINE/簡訊 格式)"></textarea>
+                            placeholder="長按貼上... (支援多筆 LINE/簡訊 格式，上限5筆)"></textarea>
+
+                        <!-- 批量解析提示面板 -->
+                        <div id="batchNotice" class="hidden bg-sky-50 border border-sky-200 rounded-xl p-2 text-[11px] text-sky-700 font-medium flex items-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-circle-info text-sky-500 text-sm"></i>
+                            <span id="batchNoticeText"></span>
+                        </div>
 
                         <div class="flex gap-2">
                             <button
@@ -334,51 +340,64 @@
 
                     <!-- Tab 2: 定位資料 -->
                     <div id="tab-content-base" class="tab-content hidden space-y-3">
-                        <div class="input-group">
-                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
-                                    class="fa-solid fa-mobile-screen text-accent mr-1"></i> 門號</label>
-                            <input type="tel" id="phone"
-                                class="phone-input w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-primary font-bold focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
-                                placeholder="09xxxxxxxx">
-                        </div>
-                        <div class="input-group">
-                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
-                                    class="fa-regular fa-clock text-accent mr-1"></i> 定位請求時間</label>
-                            <input type="text" id="reqTime"
-                                class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
-                                placeholder="yyyy/MM/dd HH:mm:ss">
-                        </div>
-                        <div class="input-group">
-                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
-                                    class="fa-solid fa-tower-cell text-accent mr-1"></i> 註冊基地台時間</label>
-                            <input type="text" id="regTime"
-                                class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
-                                placeholder="yyyy/MM/dd HH:mm:ss">
-                        </div>
-                        <div class="input-group flex gap-2">
-                            <div class="flex-1">
-                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">緯度 (Lat)</label>
-                                <input type="number" id="lat" step="any"
-                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
-                                    placeholder="23.xxxxx">
+                        
+                        <!-- 多點時間軸面板 (當有多筆資料時顯示) -->
+                        <div id="multiTowerContainer" class="hidden space-y-2">
+                            <div class="flex justify-between items-center bg-slate-100/80 p-2 rounded-xl border border-slate-200/60 text-[11px] font-bold text-slate-700">
+                                <span class="flex items-center gap-1"><i class="fa-solid fa-route text-accent"></i> 軌跡時間軸 (<span id="multiTowerCount">0</span>/5)</span>
+                                <span class="text-[10px] text-slate-400 font-normal">點擊項目可平移對焦</span>
                             </div>
-                            <div class="flex-1">
-                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">經度 (Lng)</label>
-                                <input type="number" id="lng" step="any"
-                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
-                                    placeholder="120.xxxxx">
+                            <div id="multiTowerList" class="space-y-2 max-h-[260px] overflow-y-auto pr-0.5"></div>
+                        </div>
+
+                        <!-- 單點編輯表單 (當只有一筆資料時顯示) -->
+                        <div id="singleTowerForm" class="space-y-3">
+                            <div class="input-group">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
+                                        class="fa-solid fa-mobile-screen text-accent mr-1"></i> 門號</label>
+                                <input type="tel" id="phone"
+                                    class="phone-input w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-primary font-bold focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="09xxxxxxxx">
                             </div>
+                            <div class="input-group">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
+                                        class="fa-regular fa-clock text-accent mr-1"></i> 定位請求時間</label>
+                                <input type="text" id="reqTime"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="yyyy/MM/dd HH:mm:ss">
+                            </div>
+                            <div class="input-group">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1"><i
+                                        class="fa-solid fa-tower-cell text-accent mr-1"></i> 註冊基地台時間</label>
+                                <input type="text" id="regTime"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="yyyy/MM/dd HH:mm:ss">
+                            </div>
+                            <div class="input-group flex gap-2">
+                                <div class="flex-1">
+                                    <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">緯度 (Lat)</label>
+                                    <input type="number" id="lat" step="any"
+                                        class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                        placeholder="23.xxxxx">
+                                </div>
+                                <div class="flex-1">
+                                    <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">經度 (Lng)</label>
+                                    <input type="number" id="lng" step="any"
+                                        class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                        placeholder="120.xxxxx">
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">方位角 <span
+                                        class="font-medium text-slate-400 text-[10px] ml-1">(0-360)</span></label>
+                                <input type="number" id="azi"
+                                    class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
+                                    placeholder="選填">
+                            </div>
+                            <button class="btn w-full bg-gradient-to-b from-blue-500 to-blue-600 text-white py-2 px-4 rounded-xl font-bold text-xs shadow-md mt-2" onclick="app.updateMap(true)">
+                                <i class="fa-solid fa-rotate mr-1"></i> 套用變更並重繪
+                            </button>
                         </div>
-                        <div class="input-group">
-                            <label class="block font-bold text-slate-600 mb-1 text-[11px] pl-1">方位角 <span
-                                    class="font-medium text-slate-400 text-[10px] ml-1">(0-360)</span></label>
-                            <input type="number" id="azi"
-                                class="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono bg-white/60 text-slate-700 focus:border-accent focus:bg-white transition-all outline-none shadow-sm"
-                                placeholder="選填">
-                        </div>
-                        <button class="btn w-full bg-gradient-to-b from-blue-500 to-blue-600 text-white py-2 px-4 rounded-xl font-bold text-xs shadow-md mt-2" onclick="app.updateMap(true)">
-                            <i class="fa-solid fa-rotate mr-1"></i> 套用變更並重繪
-                        </button>
                     </div>
 
                     <!-- Tab 3: 空間對比 -->
