@@ -161,12 +161,14 @@
                     if (ph.length >= 8) globalPhone = ph;
                 }
 
-                // 2. 段落切割 (Block Splitting)
-                // 優先使用雙換行分割，若無則按定位關鍵字分割
+                // 2. 段落與行層級多座標全域解析 (Block & Line Multi-Pair Parsing)
                 let rawBlocks = text.split(/\n\s*\n+/);
                 if (rawBlocks.length <= 1) {
-                    // 若無雙換行，依關鍵字分割
                     rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g);
+                }
+                // 若仍只有單一區塊，則按單一換行拆分，防範多行經緯度貼上
+                if (rawBlocks.length <= 1) {
+                    rawBlocks = text.split('\n');
                 }
 
                 const parsedList = [];
@@ -195,49 +197,59 @@
                     const azM = block.match(/(?:方位|方向|Dir|Azimuth)[^0-9\n]*([0-9]+(?:\.[0-9]+)?)/i);
                     const azi = azM ? parseFloat(azM[1]) : null;
 
-                    // D. 抓經緯度
-                    let bLat = null, bLng = null;
+                    // D. 抓經緯度 (改用 matchAll 全域捕捉該區塊的所有成對座標)
+                    const pairMatches = [
+                        ...block.matchAll(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/g),
+                        ...block.matchAll(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/g)
+                    ];
 
-                    // 模式 A: 成對座標
-                    const pairMatch = block.match(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/) ||
-                                      block.match(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/);
+                    if (pairMatches.length > 0) {
+                        pairMatches.forEach(pm => {
+                            const v1 = parseFloat(pm[1]);
+                            const v2 = parseFloat(pm[2]);
+                            const bLat = v1 < 100 ? v1 : v2;
+                            const bLng = v1 < 100 ? v2 : v1;
 
-                    if (pairMatch) {
-                        const v1 = parseFloat(pairMatch[1]);
-                        const v2 = parseFloat(pairMatch[2]);
-                        if (v1 < 100) { bLat = v1; bLng = v2; }
-                        else { bLng = v1; bLat = v2; }
+                            if (bLat >= config.boundsLatMin && bLat <= config.boundsLatMax &&
+                                bLng >= config.boundsLngMin && bLng <= config.boundsLngMax) {
+                                
+                                const isDup = parsedList.some(item => 
+                                    Math.abs(item.lat - bLat) < 0.00001 && 
+                                    Math.abs(item.lng - bLng) < 0.00001 &&
+                                    item.reqTime === reqTime
+                                );
+                                
+                                if (!isDup) {
+                                    parsedList.push({
+                                        lat: bLat,
+                                        lng: bLng,
+                                        azi: azi,
+                                        phone: blockPhone,
+                                        reqTime: reqTime,
+                                        regTime: regTime
+                                    });
+                                }
+                            }
+                        });
                     } else {
-                        // 模式 B: 關鍵字
+                        // 模式 B: 關鍵字個別搜尋
                         const latM = block.match(/(?:緯度|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
                         const lngM = block.match(/(?:經度|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
                         if (latM && lngM) {
-                            bLat = parseFloat(latM[1]);
-                            bLng = parseFloat(lngM[1]);
-                        }
-                    }
-
-                    // 驗證經緯度是否在台灣合理範圍內
-                    if (bLat !== null && bLng !== null &&
-                        bLat >= config.boundsLatMin && bLat <= config.boundsLatMax &&
-                        bLng >= config.boundsLngMin && bLng <= config.boundsLngMax) {
-                        
-                        // 避免重複加入
-                        const isDup = parsedList.some(item => 
-                            Math.abs(item.lat - bLat) < 0.00001 && 
-                            Math.abs(item.lng - bLng) < 0.00001 &&
-                            item.reqTime === reqTime
-                        );
-                        
-                        if (!isDup) {
-                            parsedList.push({
-                                lat: bLat,
-                                lng: bLng,
-                                azi: azi,
-                                phone: blockPhone,
-                                reqTime: reqTime,
-                                regTime: regTime
-                            });
+                            const bLat = parseFloat(latM[1]);
+                            const bLng = parseFloat(lngM[1]);
+                            if (bLat >= config.boundsLatMin && bLat <= config.boundsLatMax &&
+                                bLng >= config.boundsLngMin && bLng <= config.boundsLngMax) {
+                                const isDup = parsedList.some(item => 
+                                    Math.abs(item.lat - bLat) < 0.00001 && 
+                                    Math.abs(item.lng - bLng) < 0.00001
+                                );
+                                if (!isDup) {
+                                    parsedList.push({
+                                        lat: bLat, lng: bLng, azi, phone: blockPhone, reqTime, regTime
+                                    });
+                                }
+                            }
                         }
                     }
                 });
