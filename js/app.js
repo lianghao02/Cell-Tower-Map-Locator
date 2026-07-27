@@ -143,7 +143,75 @@
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
             }
 
-            // 核心解析邏輯 (支援多筆段落切割 Block Splitting 與 5 筆上限截取)
+            // DMS (度分秒) / DMM (度小數分) 轉十進位度數 (DD) 轉換器
+            function parseDMSToDD(text) {
+                const results = [];
+                // 1. 度分秒 (DMS) 匹配模式 (如 23°04'15.2"N 120°23'40.8"E 或 23d04m15.2s N)
+                const dmsRegex = /([NSEWnsew])?\s*(\d{1,3})[°度d\s]\s*(\d{1,2})['分m\s]\s*(\d{1,2}(?:\.\d+)?)[″"秒s]?\s*([NSEWnsew])?/g;
+                const dmsMatches = [...text.matchAll(dmsRegex)];
+
+                if (dmsMatches.length >= 2) {
+                    const coords = [];
+                    dmsMatches.forEach(m => {
+                        const dir = (m[1] || m[5] || '').toUpperCase();
+                        const deg = parseFloat(m[2]);
+                        const min = parseFloat(m[3]);
+                        const sec = parseFloat(m[4]);
+                        let dd = deg + (min / 60) + (sec / 3600);
+                        if (dir === 'S' || dir === 'W') dd = -dd;
+                        coords.push({ dd, dir });
+                    });
+
+                    let lat = null, lng = null;
+                    coords.forEach(c => {
+                        if (c.dir === 'N' || c.dir === 'S') lat = c.dd;
+                        else if (c.dir === 'E' || c.dir === 'W') lng = c.dd;
+                        else {
+                            if (c.dd >= config.boundsLatMin && c.dd <= config.boundsLatMax && !lat) lat = c.dd;
+                            else if (c.dd >= config.boundsLngMin && c.dd <= config.boundsLngMax && !lng) lng = c.dd;
+                        }
+                    });
+
+                    if (lat !== null && lng !== null) {
+                        results.push({ lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
+                    }
+                }
+
+                // 2. 度小數分 (DMM) 匹配模式 (如 23°04.2533'N 120°23.6800'E)
+                if (results.length === 0) {
+                    const dmmRegex = /([NSEWnsew])?\s*(\d{1,3})[°度d\s]\s*(\d{1,2}(?:\.\d+)?)['分m]?\s*([NSEWnsew])?/g;
+                    const dmmMatches = [...text.matchAll(dmmRegex)];
+                    if (dmmMatches.length >= 2) {
+                        const coords = [];
+                        dmmMatches.forEach(m => {
+                            const dir = (m[1] || m[4] || '').toUpperCase();
+                            const deg = parseFloat(m[2]);
+                            const minDec = parseFloat(m[3]);
+                            let dd = deg + (minDec / 60);
+                            if (dir === 'S' || dir === 'W') dd = -dd;
+                            coords.push({ dd, dir });
+                        });
+
+                        let lat = null, lng = null;
+                        coords.forEach(c => {
+                            if (c.dir === 'N' || c.dir === 'S') lat = c.dd;
+                            else if (c.dir === 'E' || c.dir === 'W') lng = c.dd;
+                            else {
+                                if (c.dd >= config.boundsLatMin && c.dd <= config.boundsLatMax && !lat) lat = c.dd;
+                                else if (c.dd >= config.boundsLngMin && c.dd <= config.boundsLngMax && !lng) lng = c.dd;
+                            }
+                        });
+
+                        if (lat !== null && lng !== null) {
+                            results.push({ lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
+                        }
+                    }
+                }
+
+                return results;
+            }
+
+            // 核心解析邏輯 (支援多筆段落切割 Block Splitting、全格式 DMS/DMM 座標與 5 筆上限截取)
             function parse() {
                 const text = document.getElementById("rawInput").value;
                 if (!text) return alert("請先貼上內容！");
@@ -166,7 +234,6 @@
                 if (rawBlocks.length <= 1) {
                     rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g);
                 }
-                // 若仍只有單一區塊，則按單一換行拆分，防範多行經緯度貼上
                 if (rawBlocks.length <= 1) {
                     rawBlocks = text.split('\n');
                 }
@@ -197,61 +264,56 @@
                     const azM = block.match(/(?:方位|方向|Dir|Azimuth)[^0-9\n]*([0-9]+(?:\.[0-9]+)?)/i);
                     const azi = azM ? parseFloat(azM[1]) : null;
 
-                    // D. 抓經緯度 (改用 matchAll 全域捕捉該區塊的所有成對座標)
-                    const pairMatches = [
-                        ...block.matchAll(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/g),
-                        ...block.matchAll(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/g)
-                    ];
+                    // D. 抓經緯度 (支援全格式: DMS/DMM 與 DD 成對)
+                    let foundCoords = parseDMSToDD(block);
 
-                    if (pairMatches.length > 0) {
-                        pairMatches.forEach(pm => {
-                            const v1 = parseFloat(pm[1]);
-                            const v2 = parseFloat(pm[2]);
-                            const bLat = v1 < 100 ? v1 : v2;
-                            const bLng = v1 < 100 ? v2 : v1;
+                    if (foundCoords.length === 0) {
+                        // 模式 A: 十進位 DD 成對座標 (matchAll)
+                        const pairMatches = [
+                            ...block.matchAll(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/g),
+                            ...block.matchAll(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/g)
+                        ];
 
-                            if (bLat >= config.boundsLatMin && bLat <= config.boundsLatMax &&
-                                bLng >= config.boundsLngMin && bLng <= config.boundsLngMax) {
-                                
-                                const isDup = parsedList.some(item => 
-                                    Math.abs(item.lat - bLat) < 0.00001 && 
-                                    Math.abs(item.lng - bLng) < 0.00001 &&
-                                    item.reqTime === reqTime
-                                );
-                                
-                                if (!isDup) {
-                                    parsedList.push({
-                                        lat: bLat,
-                                        lng: bLng,
-                                        azi: azi,
-                                        phone: blockPhone,
-                                        reqTime: reqTime,
-                                        regTime: regTime
-                                    });
-                                }
-                            }
-                        });
-                    } else {
-                        // 模式 B: 關鍵字個別搜尋
-                        const latM = block.match(/(?:緯度|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
-                        const lngM = block.match(/(?:經度|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
-                        if (latM && lngM) {
-                            const bLat = parseFloat(latM[1]);
-                            const bLng = parseFloat(lngM[1]);
-                            if (bLat >= config.boundsLatMin && bLat <= config.boundsLatMax &&
-                                bLng >= config.boundsLngMin && bLng <= config.boundsLngMax) {
-                                const isDup = parsedList.some(item => 
-                                    Math.abs(item.lat - bLat) < 0.00001 && 
-                                    Math.abs(item.lng - bLng) < 0.00001
-                                );
-                                if (!isDup) {
-                                    parsedList.push({
-                                        lat: bLat, lng: bLng, azi, phone: blockPhone, reqTime, regTime
-                                    });
-                                }
+                        if (pairMatches.length > 0) {
+                            pairMatches.forEach(pm => {
+                                const v1 = parseFloat(pm[1]);
+                                const v2 = parseFloat(pm[2]);
+                                const bLat = v1 < 100 ? v1 : v2;
+                                const bLng = v1 < 100 ? v2 : v1;
+                                foundCoords.push({ lat: bLat, lng: bLng });
+                            });
+                        } else {
+                            // 模式 B: 關鍵字個別搜尋
+                            const latM = block.match(/(?:緯度|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
+                            const lngM = block.match(/(?:經度|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
+                            if (latM && lngM) {
+                                foundCoords.push({ lat: parseFloat(latM[1]), lng: parseFloat(lngM[1]) });
                             }
                         }
                     }
+
+                    foundCoords.forEach(c => {
+                        if (c.lat >= config.boundsLatMin && c.lat <= config.boundsLatMax &&
+                            c.lng >= config.boundsLngMin && c.lng <= config.boundsLngMax) {
+                            
+                            const isDup = parsedList.some(item => 
+                                Math.abs(item.lat - c.lat) < 0.00001 && 
+                                Math.abs(item.lng - c.lng) < 0.00001 &&
+                                item.reqTime === reqTime
+                            );
+                            
+                            if (!isDup) {
+                                parsedList.push({
+                                    lat: c.lat,
+                                    lng: c.lng,
+                                    azi: azi,
+                                    phone: blockPhone,
+                                    reqTime: reqTime,
+                                    regTime: regTime
+                                });
+                            }
+                        }
+                    });
                 });
 
                 // 若段落分割未找到，嘗試全文備用成對搜尋 (全域捕捉)
