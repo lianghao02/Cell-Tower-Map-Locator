@@ -211,6 +211,104 @@
                 return results;
             }
 
+            // 判斷是否為通訊調閱入口網站的完整定位回覆，避免一般座標文字誤入專用解析流程
+            function isPortalResponse(text) {
+                return /回覆資訊[：:]/.test(text) &&
+                    /定位記錄[：:]/.test(text) &&
+                    /序號\s+定位類別\s+定位狀態/.test(text) &&
+                    /^\s*\d+\s+即時定位\s+(?:定位完成|無法定位)/m.test(text);
+            }
+
+            // 將國際格式門號轉為既有介面使用的 09 格式
+            function normalizePhone(phone) {
+                if (!phone) return "";
+                const digits = String(phone).replace(/\D/g, "");
+                return digits.startsWith("8869") ? "0" + digits.substring(3) : digits;
+            }
+
+            // 從指定標題區段擷取經緯度，避免基地臺與 GMLC 座標互相混用
+            function parsePortalCoordinateSection(block, sectionPattern, endPattern) {
+                const sectionMatch = block.match(new RegExp(
+                    `${sectionPattern}\\s*([\\s\\S]*?)(?=${endPattern}|$)`,
+                    "i"
+                ));
+                if (!sectionMatch) return null;
+
+                const lngMatch = sectionMatch[1].match(/經度\s*[：:]?\s*(-?\d{1,3}(?:\.\d+)?)/);
+                const latMatch = sectionMatch[1].match(/緯度\s*[：:]?\s*(-?\d{1,2}(?:\.\d+)?)/);
+                if (!latMatch || !lngMatch) return null;
+
+                const lat = parseFloat(latMatch[1]);
+                const lng = parseFloat(lngMatch[1]);
+                if (lat < config.boundsLatMin || lat > config.boundsLatMax ||
+                    lng < config.boundsLngMin || lng > config.boundsLngMax) {
+                    return null;
+                }
+                return { lat, lng };
+            }
+
+            // 解析入口網站回覆；輸出沿用既有 towers 結構，降低對地圖與歷史功能的影響
+            function parsePortalResponse(text, fallbackPhone) {
+                const recordStarts = [...text.matchAll(
+                    /^\s*(\d+)\s+即時定位\s+(定位完成|無法定位)(?=\s)/gm
+                )];
+                const declaredMatch = text.match(/定位紀錄筆數\s*[：:]?\s*(\d+)\s*筆/);
+                const targetMatch = text.match(/(?:調閱目標資訊|申請用戶帳號)\s*[：:]?\s*(8869\d{8}|09\d{8})/);
+                const globalPhone = normalizePhone(targetMatch ? targetMatch[1] : fallbackPhone);
+                const records = [];
+                let completedCount = 0;
+                let failedCount = 0;
+
+                recordStarts.forEach((start, index) => {
+                    const end = index + 1 < recordStarts.length ? recordStarts[index + 1].index : text.length;
+                    const block = text.slice(start.index, end);
+                    const statusText = start[2];
+                    if (statusText === "定位完成") completedCount += 1;
+                    else failedCount += 1;
+
+                    const reqMatch = block.match(/(?:定位請求的時間|定位請求時間|請求定位時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+                    const regMatch = block.match(/(?:註冊基地[臺台]時間|最後註冊時間|基地[臺台]註冊時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+                    const cellMatch = block.match(/(?:註冊基地[臺台]編號|基地[臺台]編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
+                    const azMatch = block.match(/(?:定位基地[臺台]方向角|基地[臺台](?:方向角|方位角)|天線方位角|Azimuth|Dir)\s*[：:]?\s*(-?\d+(?:\.\d+)?)/i);
+                    const phoneMatch = block.match(/行動電話號碼\s*[：:]?\s*(8869\d{8}|09\d{8})/);
+                    const tower = parsePortalCoordinateSection(
+                        block,
+                        "基地[臺台]經緯度",
+                        "三角定位\\s*[（(]?GMLC[）)]?經緯度|行動電話號碼"
+                    );
+                    const gmlc = parsePortalCoordinateSection(
+                        block,
+                        "三角定位\\s*[（(]?GMLC[）)]?經緯度",
+                        "行動電話號碼|用戶在國內|尚未收到業者回覆"
+                    );
+
+                    // 無法定位或缺少有效基地臺座標的紀錄保留於統計，但不送入既有地圖繪製
+                    if (statusText !== "定位完成" || !tower) return;
+
+                    records.push({
+                        lat: tower.lat,
+                        lng: tower.lng,
+                        azi: azMatch ? parseFloat(azMatch[1]) : null,
+                        phone: normalizePhone(phoneMatch ? phoneMatch[1] : globalPhone),
+                        reqTime: reqMatch ? reqMatch[1].replace(/-/g, "/") : "",
+                        regTime: regMatch ? regMatch[1].replace(/-/g, "/") : "",
+                        sequence: parseInt(start[1], 10),
+                        cellId: cellMatch ? cellMatch[1] : "",
+                        status: "定位完成",
+                        gmlcLat: gmlc ? gmlc.lat : null,
+                        gmlcLng: gmlc ? gmlc.lng : null
+                    });
+                });
+
+                return {
+                    records,
+                    declaredCount: declaredMatch ? parseInt(declaredMatch[1], 10) : recordStarts.length,
+                    parsedCount: recordStarts.length,
+                    completedCount,
+                    failedCount
+                };
+            }
+
             // 核心解析邏輯 (支援多筆段落切割 Block Splitting、全格式 DMS/DMM 座標與 5 筆上限截取)
             function parse() {
                 const text = document.getElementById("rawInput").value;
@@ -229,16 +327,17 @@
                     if (ph.length >= 8) globalPhone = ph;
                 }
 
-                // 2. 段落與行層級多座標全域解析 (Block & Line Multi-Pair Parsing)
-                let rawBlocks = text.split(/\n\s*\n+/);
-                if (rawBlocks.length <= 1) {
+                // 2. 完整調閱回覆使用專用解析器；其他內容維持既有解析流程
+                const portalResult = isPortalResponse(text) ? parsePortalResponse(text, globalPhone) : null;
+                let rawBlocks = portalResult ? [] : text.split(/\n\s*\n+/);
+                if (!portalResult && rawBlocks.length <= 1) {
                     rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g);
                 }
-                if (rawBlocks.length <= 1) {
+                if (!portalResult && rawBlocks.length <= 1) {
                     rawBlocks = text.split('\n');
                 }
 
-                const parsedList = [];
+                const parsedList = portalResult ? portalResult.records.slice() : [];
                 const timePattern = "(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}:\\d{1,2})";
 
                 rawBlocks.forEach((block) => {
@@ -317,7 +416,7 @@
                 });
 
                 // 若段落分割未找到，嘗試全文備用成對搜尋 (全域捕捉)
-                if (parsedList.length === 0) {
+                if (!portalResult && parsedList.length === 0) {
                     const globalPairs = [...text.matchAll(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/g)];
                     globalPairs.forEach(m => {
                         const v1 = parseFloat(m[1]), v2 = parseFloat(m[2]);
@@ -329,6 +428,10 @@
                             });
                         }
                     });
+                }
+
+                if (portalResult && parsedList.length === 0) {
+                    return alert(`偵測到 ${portalResult.parsedCount} 筆定位紀錄，但沒有可繪製的有效基地臺座標。`);
                 }
 
                 if (parsedList.length === 0) {
@@ -350,7 +453,18 @@
                 const batchNotice = document.getElementById("batchNotice");
                 const batchNoticeText = document.getElementById("batchNoticeText");
 
-                if (originalCount > config.maxBatchLimit) {
+                if (portalResult) {
+                    if (originalCount > config.maxBatchLimit) {
+                        finalTowers = parsedList.slice(0, config.maxBatchLimit);
+                    }
+                    if (batchNotice && batchNoticeText) {
+                        batchNotice.classList.remove("hidden");
+                        const limitText = originalCount > config.maxBatchLimit
+                            ? `，目前依既有上限載入前 ${config.maxBatchLimit} 筆`
+                            : "";
+                        batchNoticeText.innerText = `完整回覆共 ${portalResult.parsedCount} 筆：${portalResult.completedCount} 筆完成、${portalResult.failedCount} 筆無法定位；有效基地臺 ${originalCount} 筆${limitText}。`;
+                    }
+                } else if (originalCount > config.maxBatchLimit) {
                     finalTowers = parsedList.slice(0, config.maxBatchLimit);
                     if (batchNotice && batchNoticeText) {
                         batchNotice.classList.remove("hidden");
@@ -1210,10 +1324,12 @@
                             phone: item.phone,
                             reqTime: item.reqTime,
                             regTime: item.regTime,
-                            addrLat: item.addrLat !== undefined ? item.addrLat : null,
-                            addrLng: item.addrLng !== undefined ? item.addrLng : null,
-                            addrName: item.addrName !== undefined ? item.addrName : "",
-                        };
+                             addrLat: item.addrLat !== undefined ? item.addrLat : null,
+                             addrLng: item.addrLng !== undefined ? item.addrLng : null,
+                             addrName: item.addrName !== undefined ? item.addrName : "",
+                             searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
+                             towers: Array.isArray(item.towers) ? item.towers.map(tower => ({ ...tower })) : [],
+                         };
                         currentHistoryId = item.id;
                         syncUI();
                         const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
