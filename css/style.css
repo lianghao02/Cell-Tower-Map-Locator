@@ -1,4 +1,23 @@
         /* Leaflet Map Fix */
-        #map {
+#map {
             z-index: 1;
+        }
+
+        :root {
+            --morandi-bg: #F3F5F8;
+            --morandi-surface: rgba(255, 255, 255, 0.85);
+            --morandi-text: #2B364B;
+            --morandi-muted: #667080;
+            --morandi-primary: #526F94;
+            --morandi-shadow: 0 8px 30px rgba(160, 175, 195, 0.12);
+        }
+        body { background: var(--morandi-bg) !important; color: var(--morandi-text); font-family: "Microsoft JhengHei", "Segoe UI", system-ui, sans-serif; }
+        .bg-white, .bg-white\/85 { background-color: var(--morandi-surface) !important; }
+        .shadow-2xl, .shadow-xl { box-shadow: var(--morandi-shadow) !important; }
+        input:focus, textarea:focus, select:focus { border-color: var(--morandi-primary) !important; box-shadow: 0 0 0 3px rgba(107, 139, 176, .16) !important; }
+        .smart-area:placeholder-shown {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 96'%3E%3Cpath d='M22 74c18-32 37-48 58-48s39 16 58 48' fill='none' stroke='%236B8BB0' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='42' cy='63' r='5' fill='%236E9C83'/%3E%3Ccircle cx='80' cy='31' r='5' fill='%23C78876'/%3E%3Ccircle cx='118' cy='63' r='5' fill='%236B8BB0'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px bottom 8px;
+            background-size: 110px auto;
         }
