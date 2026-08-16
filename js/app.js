@@ -58,6 +58,23 @@
 
             const HISTORY_STORAGE_KEY = "cell_locate_v1_db";
 
+            function isMobileLayout() {
+                return window.matchMedia("(max-width: 767px)").matches;
+            }
+
+            function getFitBoundsOptions() {
+                const consoleEl = document.getElementById("floating-console");
+                const isCollapsed = consoleEl && consoleEl.classList.contains("collapsed");
+                if (isMobileLayout()) {
+                    return {
+                        paddingTopLeft: [50, 50],
+                        paddingBottomRight: [50, isCollapsed ? 100 : 360],
+                        maxZoom: 17
+                    };
+                }
+                return { padding: [50, 50], maxZoom: 17 };
+            }
+
             // 初始化
             function init() {
                 loadConfig();
@@ -82,6 +99,8 @@
 
                     syncConfigToUI();
                     initDrawer(); // 側邊抽屜事件只綁定一次
+                    syncConsoleToggleIcon();
+                    window.addEventListener("resize", syncConsoleToggleIcon);
 
                     // 檢查網址參數 (分享連結開啟)
                     checkUrlParams();
@@ -228,10 +247,18 @@
 
             // 判斷是否為通訊調閱入口網站的完整定位回覆，避免一般座標文字誤入專用解析流程
             function isPortalResponse(text) {
-                return /回覆資訊[：:]/.test(text) &&
+                const hasCompleteResponse = /回覆資訊[：:]/.test(text) &&
                     /定位記錄[：:]/.test(text) &&
                     /序號\s+定位類別\s+定位狀態/.test(text) &&
                     /^\s*\d+\s+即時定位\s+(?:定位完成|無法定位)/m.test(text);
+                const hasPortalRecords = /^\s*\d+\s+即時定位\s+(?:定位完成|無法定位)/m.test(text);
+                const hasSingleRecordFragment =
+                    /(?:即時定位\s+)?(?:定位完成|無法定位)/.test(text) &&
+                    /基地[臺台]經緯度/.test(text) &&
+                    /三角定位\s*[（(]?GMLC[）)]?經緯度/.test(text) &&
+                    /(?:定位請求|註冊基地|定位基地[臺台]方向角)/.test(text);
+
+                return hasCompleteResponse || hasPortalRecords || hasSingleRecordFragment;
             }
 
             // 將國際格式門號轉為既有介面使用的 09 格式
@@ -281,9 +308,15 @@
 
             // 解析入口網站回覆；輸出沿用既有 towers 結構，降低對地圖與歷史功能的影響
             function parsePortalResponse(text, fallbackPhone) {
-                const recordStarts = [...text.matchAll(
+                let recordStarts = [...text.matchAll(
                     /^\s*(\d+)\s+即時定位\s+(定位完成|無法定位)(?=\s)/gm
                 )];
+                if (recordStarts.length === 0) {
+                    const statusMatch = text.match(/(?:即時定位\s+)?(定位完成|無法定位)/);
+                    if (statusMatch) {
+                        recordStarts = [{ index: 0, 1: "1", 2: statusMatch[1] }];
+                    }
+                }
                 const declaredMatch = text.match(/定位紀錄筆數\s*[：:]?\s*(\d+)\s*筆/);
                 const targetMatch = text.match(/(?:調閱目標資訊|申請用戶帳號)\s*[：:]?\s*(8869\d{8}|09\d{8})/);
                 const globalPhone = normalizePhone(targetMatch ? targetMatch[1] : fallbackPhone);
@@ -851,6 +884,12 @@
                         updateMap(false, "addr");
                         switchTab('compare');
                     });
+
+                    const floatingConsole = document.getElementById("floating-console");
+                    if (floatingConsole && L.DomEvent) {
+                        L.DomEvent.disableClickPropagation(floatingConsole);
+                        L.DomEvent.disableScrollPropagation(floatingConsole);
+                    }
                 } else {
                     if (!focusType) {
                         setTimeout(() => map.invalidateSize(), 100);
@@ -961,7 +1000,7 @@
                         map.setView([data.addrLat, data.addrLng], 18);
                     } else if (focusType === "bounds" && allCoords.length > 1) {
                         const bounds = L.latLngBounds(allCoords);
-                        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                        map.fitBounds(bounds, getFitBoundsOptions());
                     } else {
                         map.setView([centerLat, centerLng], (hasBase || hasAddr) ? 18 : 8);
                     }
@@ -1041,7 +1080,7 @@
 
                         if (save) {
                             const bounds = L.latLngBounds([[data.lat, data.lng], [data.addrLat, data.addrLng]]);
-                            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                            map.fitBounds(bounds, getFitBoundsOptions());
                         }
 
                         // 更新空間關聯分析 UI 面板
@@ -1464,9 +1503,22 @@
             }
 
             // 懸浮控制台展開/折疊切換
-            function toggleConsole(forceState) {
+            function syncConsoleToggleIcon() {
                 const el = document.getElementById("floating-console");
                 const arrow = document.getElementById("console-arrow");
+                if (!el || !arrow) return;
+
+                const isCollapsed = el.classList.contains("collapsed");
+                arrow.classList.remove("fa-chevron-left", "fa-chevron-right", "fa-chevron-up", "fa-chevron-down");
+                if (isMobileLayout()) {
+                    arrow.classList.add(isCollapsed ? "fa-chevron-up" : "fa-chevron-down");
+                } else {
+                    arrow.classList.add(isCollapsed ? "fa-chevron-right" : "fa-chevron-left");
+                }
+            }
+
+            function toggleConsole(forceState) {
+                const el = document.getElementById("floating-console");
                 if (!el) return;
 
                 const isCollapsed = el.classList.contains("collapsed");
@@ -1474,16 +1526,13 @@
 
                 if (shouldCollapse) {
                     el.classList.add("collapsed");
-                    if (arrow) {
-                        arrow.classList.remove("fa-chevron-left");
-                        arrow.classList.add("fa-chevron-right");
-                    }
                 } else {
                     el.classList.remove("collapsed");
-                    if (arrow) {
-                        arrow.classList.remove("fa-chevron-right");
-                        arrow.classList.add("fa-chevron-left");
-                    }
+                }
+                syncConsoleToggleIcon();
+
+                if (map) {
+                    setTimeout(() => map.invalidateSize(), 320);
                 }
             }
 

@@ -114,8 +114,62 @@
       #floating-console {
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      #floating-console.collapsed {
-        transform: translateX(-376px);
+
+      @media (min-width: 768px) {
+        #floating-console.collapsed {
+          transform: translateX(-376px);
+        }
+      }
+
+      /* 手機版：控制台改為底部抽屜，避免窄螢幕或瀏覽器網址列遮住查詢功能 */
+      @media (max-width: 767px) {
+        #floating-console {
+          top: auto;
+          right: 8px;
+          bottom: max(0px, env(safe-area-inset-bottom));
+          left: 8px;
+          width: auto;
+          height: min(75dvh, calc(100dvh - 16px));
+          max-height: calc(100dvh - 16px);
+        }
+
+        #floating-console.collapsed {
+          transform: translateY(calc(100% - 72px));
+        }
+
+        #console-card {
+          height: 100%;
+          max-height: none;
+          padding: 16px;
+          border-radius: 20px 20px 16px 16px;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+        }
+
+        #console-card > .flex-1 {
+          min-height: 0;
+          max-height: none !important;
+          overscroll-behavior: contain;
+        }
+
+        #floating-console.collapsed #console-card > :not(:first-child) {
+          visibility: hidden;
+          pointer-events: none;
+        }
+
+        #floating-console.collapsed #console-card > :first-child {
+          margin-bottom: 0;
+          border-bottom-color: transparent;
+        }
+
+        #btnToggleConsole {
+          top: 16px;
+          right: 12px;
+          width: 36px;
+          height: 36px;
+          transform: none;
+          border-radius: 9999px;
+        }
       }
 
       /* 歷史紀錄自訂微型滾動條 */
