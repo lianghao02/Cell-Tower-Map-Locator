@@ -63,7 +63,15 @@
                 loadConfig();
                 try {
                     const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
-                    if (saved) history = JSON.parse(saved);
+                    if (saved) {
+                        try {
+                            const parsed = JSON.parse(saved);
+                            if (Array.isArray(parsed)) history = parsed;
+                        } catch (err) {
+                            console.error("History parse error, resetting history:", err);
+                            history = [];
+                        }
+                    }
                     renderHistory();
 
                     // 監聽輸入框變更
@@ -79,7 +87,7 @@
                     checkUrlParams();
 
                     // 初始化智慧分頁導航
-                    const params = new URLSearchParams(window.location.search);
+                    const params = getUrlParams();
                     if (params.has('lat') && params.has('lng')) {
                         if (params.has('addrLat') && params.has('addrLng')) {
                             switchTab('compare');
@@ -96,8 +104,15 @@
                 }
             }
 
-            function checkUrlParams() {
+            function getUrlParams() {
                 const params = new URLSearchParams(window.location.search);
+                const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+                hashParams.forEach((value, key) => params.set(key, value));
+                return params;
+            }
+
+            function checkUrlParams() {
+                const params = getUrlParams();
                 let hasData = false;
 
                 if (params.has('lat') && params.has('lng')) {
@@ -224,6 +239,23 @@
                 if (!phone) return "";
                 const digits = String(phone).replace(/\D/g, "");
                 return digits.startsWith("8869") ? "0" + digits.substring(3) : digits;
+            }
+
+            // 日期時間解析器 (支援民國紀年轉西元與 ISO/標準日期，防止 Invalid Date 造成排序失控)
+            function parseDateTimeToMs(str) {
+                if (!str) return 0;
+                let normalized = String(str).trim();
+                const rocMatch = normalized.match(/^(\d{2,3})[\/-](\d{1,2})[\/-](\d{1,2})(?:\s+(\d{1,2}:\d{1,2}(?::\d{1,2})?))?/);
+                if (rocMatch) {
+                    const yearNum = parseInt(rocMatch[1], 10);
+                    if (yearNum < 1900) {
+                        const adYear = yearNum + 1911;
+                        const timePart = rocMatch[4] || "00:00:00";
+                        normalized = `${adYear}/${rocMatch[2].padStart(2, '0')}/${rocMatch[3].padStart(2, '0')} ${timePart}`;
+                    }
+                }
+                const ms = Date.parse(normalized.replace(/-/g, "/"));
+                return isNaN(ms) ? 0 : ms;
             }
 
             // 從指定標題區段擷取經緯度，避免基地臺與 GMLC 座標互相混用
@@ -438,10 +470,12 @@
                     return alert("找不到有效的台灣座標數值，請確認內容。");
                 }
 
-                // 3. 時間排序 (如果有時間資訊，依請求時間由舊到新排序)
+                // 3. 時間排序 (相容西元與民國紀年，防範 Invalid Date 造成排序跳躍)
                 parsedList.sort((a, b) => {
-                    if (a.reqTime && b.reqTime) {
-                        return new Date(a.reqTime) - new Date(b.reqTime);
+                    const timeA = parseDateTimeToMs(a.reqTime || a.regTime);
+                    const timeB = parseDateTimeToMs(b.reqTime || b.regTime);
+                    if (timeA && timeB) {
+                        return timeA - timeB;
                     }
                     return 0;
                 });
@@ -455,20 +489,20 @@
 
                 if (portalResult) {
                     if (originalCount > config.maxBatchLimit) {
-                        finalTowers = parsedList.slice(0, config.maxBatchLimit);
+                        finalTowers = parsedList.slice(-config.maxBatchLimit);
                     }
                     if (batchNotice && batchNoticeText) {
                         batchNotice.classList.remove("hidden");
                         const limitText = originalCount > config.maxBatchLimit
-                            ? `，目前依既有上限載入前 ${config.maxBatchLimit} 筆`
+                            ? `，目前依既有上限載入最新 ${config.maxBatchLimit} 筆`
                             : "";
                         batchNoticeText.innerText = `完整回覆共 ${portalResult.parsedCount} 筆：${portalResult.completedCount} 筆完成、${portalResult.failedCount} 筆無法定位；有效基地臺 ${originalCount} 筆${limitText}。`;
                     }
                 } else if (originalCount > config.maxBatchLimit) {
-                    finalTowers = parsedList.slice(0, config.maxBatchLimit);
+                    finalTowers = parsedList.slice(-config.maxBatchLimit);
                     if (batchNotice && batchNoticeText) {
                         batchNotice.classList.remove("hidden");
-                        batchNoticeText.innerText = `偵測到 ${originalCount} 筆定位資料，已為您載入前 ${config.maxBatchLimit} 筆軌跡。`;
+                        batchNoticeText.innerText = `偵測到 ${originalCount} 筆定位資料，已為您載入最新 ${config.maxBatchLimit} 筆軌跡。`;
                     }
                 } else if (originalCount > 1) {
                     if (batchNotice && batchNoticeText) {
@@ -547,6 +581,9 @@
 
             // 計算航向角（相對方位角）
             function calculateBearing(lat1, lng1, lat2, lng2) {
+                if (Math.abs(lat1 - lat2) < 0.000001 && Math.abs(lng1 - lng2) < 0.000001) {
+                    return 0; // 同點位避免 0/0 特殊解
+                }
                 const dLng = (lng2 - lng1) * Math.PI / 180;
                 const rLat1 = lat1 * Math.PI / 180;
                 const rLat2 = lat2 * Math.PI / 180;
@@ -594,7 +631,12 @@
                         "Accept-Language": "zh-TW,zh;q=0.9"
                     }
                 })
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP 狀態碼異常 ${res.status}`);
+                    }
+                    return res.json();
+                })
                 .then(res => {
                     btn.disabled = false;
                     btn.innerHTML = origIcon;
@@ -720,9 +762,9 @@
                             <div class="flex justify-between items-center font-bold text-slate-800">
                                 <span class="flex items-center gap-1.5">
                                     <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-mono shadow-sm font-bold">${num}</span>
-                                    <span class="font-mono text-primary">${t.lat}, ${t.lng}</span>
+                                    <span class="font-mono text-primary">${esc(t.lat)}, ${esc(t.lng)}</span>
                                 </span>
-                                ${t.azi !== null && t.azi !== undefined ? `<span class="text-[10px] text-accent font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">🧭 ${t.azi}°</span>` : ""}
+                                ${t.azi !== null && t.azi !== undefined ? `<span class="text-[10px] text-accent font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">🧭 ${esc(t.azi)}°</span>` : ""}
                             </div>
                             <div class="flex justify-between items-center text-[11px] text-slate-500 font-mono">
                                 <span>${t.reqTime ? `🕒 ${esc(t.reqTime)}` : (t.phone ? `📱 ${esc(t.phone)}` : '點位 ' + num)}</span>
@@ -824,11 +866,11 @@
                     towers.forEach((t, i) => {
                         allCoords.push([t.lat, t.lng]);
 
-                        let popupText = `<b>📍 基地台點位 #${i + 1}</b><br>${t.lat}, ${t.lng}`;
-                        if (t.phone) popupText += `<br>門號: ${t.phone}`;
-                        if (t.reqTime) popupText += `<br>🕒 請求: ${t.reqTime}`;
-                        if (t.regTime) popupText += `<br>📡 註冊: ${t.regTime}`;
-                        if (t.azi !== null) popupText += `<br>🧭 方位: ${t.azi}°`;
+                        let popupText = `<b>📍 基地台點位 #${i + 1}</b><br>${esc(t.lat)}, ${esc(t.lng)}`;
+                        if (t.phone) popupText += `<br>門號: ${esc(t.phone)}`;
+                        if (t.reqTime) popupText += `<br>🕒 請求: ${esc(t.reqTime)}`;
+                        if (t.regTime) popupText += `<br>📡 註冊: ${esc(t.regTime)}`;
+                        if (t.azi !== null) popupText += `<br>🧭 方位: ${esc(t.azi)}°`;
 
                         let m;
                         if (towers.length > 1) {
@@ -847,6 +889,23 @@
                             if (i === 0) m.openPopup();
                         }
                         multiTowerLayers.push(m);
+
+                        // GMLC 為業者提供的定位座標，與基地台位置分開標示
+                        if (t.gmlcLat !== null && t.gmlcLat !== undefined &&
+                            t.gmlcLng !== null && t.gmlcLng !== undefined) {
+                            allCoords.push([t.gmlcLat, t.gmlcLng]);
+                            const gmlcIcon = L.divIcon({
+                                html: '<div class="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-md"></div>',
+                                className: 'custom-gmlc-icon',
+                                iconSize: [16, 16],
+                                iconAnchor: [8, 8]
+                            });
+                            const gmlcPopup = `<b>🎯 GMLC 定位點 #${i + 1}</b><br>${esc(t.gmlcLat)}, ${esc(t.gmlcLng)}`;
+                            const gmlcMarker = L.marker([t.gmlcLat, t.gmlcLng], { icon: gmlcIcon })
+                                .addTo(map)
+                                .bindPopup(gmlcPopup);
+                            multiTowerLayers.push(gmlcMarker);
+                        }
 
                         // 繪製寶藍色 15% 清透扇形 (Alpha 疊加，重疊區域自動加深色調不蓋圖)
                         if (t.azi !== null && t.azi !== undefined) {
@@ -878,7 +937,10 @@
 
                     // 繪製多點軌跡連線 (Polyline Path)
                     if (towers.length > 1) {
-                        const pathCoords = towers.map(t => [t.lat, t.lng]);
+                        const pathCoords = towers.map(t => [
+                            t.gmlcLat !== null && t.gmlcLat !== undefined ? t.gmlcLat : t.lat,
+                            t.gmlcLng !== null && t.gmlcLng !== undefined ? t.gmlcLng : t.lng
+                        ]);
                         const pathLine = L.polyline(pathCoords, {
                             color: "#2563eb",
                             weight: 3,
@@ -886,7 +948,7 @@
                             opacity: 0.8
                         }).addTo(map);
 
-                        pathLine.bindTooltip("👣 定位移動軌跡線", { permanent: false, direction: "center" });
+                        pathLine.bindTooltip("👣 GMLC 定位移動軌跡線", { permanent: false, direction: "center" });
                         multiTowerLayers.push(pathLine);
                     }
                 }
@@ -928,7 +990,7 @@
                         updateMap(false);
                     });
 
-                    let addrDesc = `<b>🏠 目標地址 / 位置</b><br>${data.addrName || "自訂位置"}<br>${data.addrLat}, ${data.addrLng}`;
+                    let addrDesc = `<b>🏠 目標地址 / 位置</b><br>${esc(data.addrName || "自訂位置")}<br>${esc(data.addrLat)}, ${esc(data.addrLng)}`;
                     addrMarker.bindPopup(addrDesc);
                     if (!hasBase) {
                         addrMarker.openPopup();
@@ -945,11 +1007,16 @@
                         let lineColor = "#64748b";
 
                         if (data.azi !== null) {
-                            isCovered = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
+                            const isDirectionMatched = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
+                            isCovered = isDirectionMatched && dist <= config.sectorRadius;
                             if (isCovered) {
                                 coveredText = "🎯 位於發射扇形內";
                                 coveredClass = "text-emerald-600";
                                 lineColor = "#10b981";
+                            } else if (isDirectionMatched) {
+                                coveredText = `⚠️ 方向符合，但超出 ${config.sectorRadius} 公尺顯示半徑`;
+                                coveredClass = "text-amber-600";
+                                lineColor = "#f59e0b";
                             } else {
                                 coveredText = "❌ 位於發射扇形外";
                                 coveredClass = "text-rose-600";
@@ -1080,22 +1147,17 @@
                 else alert("無座標");
             }
 
-            // 產生應用程式分享連結 (支援目標地址參數)
+            // 產生應用程式分享連結：使用 fragment 避免參數進入伺服器紀錄，並排除門號、時間與地址名稱
             function getAppLink() {
                 const baseUrl = "https://lianghao02.github.io/Cell-Tower-Map-Locator/";
                 const params = new URLSearchParams();
                 if (data.lat !== null) params.append('lat', data.lat);
                 if (data.lng !== null) params.append('lng', data.lng);
                 if (data.azi !== null) params.append('azi', data.azi);
-                if (data.phone) params.append('phone', data.phone);
-                if (data.reqTime) params.append('reqTime', data.reqTime);
-                if (data.regTime) params.append('regTime', data.regTime);
-                
                 if (data.addrLat !== null) params.append('addrLat', data.addrLat);
                 if (data.addrLng !== null) params.append('addrLng', data.addrLng);
-                if (data.addrName) params.append('addrName', data.addrName);
-                
-                return baseUrl + "?" + params.toString();
+
+                return baseUrl + "#" + params.toString();
             }
 
             // 取得完整分享文字 (有/無地址動態修正)
@@ -1116,9 +1178,14 @@
                     const bearing = Math.round(calculateBearing(data.lat, data.lng, data.addrLat, data.addrLng));
                     let coveredStatus = "未提供發射方位角";
                     if (data.azi !== null) {
-                        const isCovered = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
-                        coveredStatus = isCovered ? "🎯 位於發射扇形範圍內" : "❌ 位於發射扇形範圍外";
-                    }
+                        const isDirectionMatched = isAngleWithinSector(bearing, data.azi, config.sectorAperture);
+                        const isCovered = isDirectionMatched && dist <= config.sectorRadius;
+                        coveredStatus = isCovered
+                            ? "🎯 位於發射扇形範圍內"
+                            : (isDirectionMatched
+                                ? `⚠️ 方向符合，但超出 ${config.sectorRadius} 公尺顯示半徑`
+                                : "❌ 位於發射扇形範圍外");
+                }
 
                     t += `\n\n🏠 目標關連位置: ${data.addrName || "自訂位置"}`;
                     t += `\n📍 目標經緯度: ${data.addrLat}, ${data.addrLng}`;
@@ -1126,9 +1193,7 @@
                     t += `\n🧭 相對方位角: ${bearing}° (${coveredStatus})`;
                 }
 
-                // 加上專用連結
                 t += `\n\n📌 專用圖台 (含扇形與地址):\n${appUrl}`;
-
                 return t;
             }
 
@@ -1137,8 +1202,7 @@
                 const t = getFullText();
 
                 if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard
-                        .writeText(t)
+                    navigator.clipboard.writeText(t)
                         .then(() => alert("✅ 資訊已複製"))
                         .catch((err) => {
                             console.error(err);
@@ -1153,94 +1217,64 @@
                 try {
                     const ta = document.createElement("textarea");
                     ta.value = text;
-                    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+                    ta.style.cssText = "position:fixed;top:-9999px;left:-9999px;opacity:0";
                     document.body.appendChild(ta);
                     ta.select();
                     const ok = document.execCommand("copy");
                     document.body.removeChild(ta);
-                    if (ok) { alert("✅ 資訊已複製"); }
-                    else { prompt("請手動複製以下內容 (Ctrl+A → Ctrl+C):", text); }
-                } catch (e) {
+                    if (ok) alert("✅ 資訊已複製");
+                    else prompt("請手動複製以下內容 (Ctrl+A → Ctrl+C):", text);
+                } catch (err) {
                     prompt("請手動複製以下內容 (Ctrl+A → Ctrl+C):", text);
                 }
             }
 
-            // LINE & Telegram 分享
             function share(type) {
                 if (data.lat === null) return alert("無座標");
                 const t = getFullText();
-                const mapUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`; // 用於 Telegram 按鈕連結
-
-                let url = "";
+                const mapUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`;
+                let url;
                 if (type === "line") {
                     url = `https://line.me/R/msg/text/?${encodeURIComponent(t)}`;
-                }
-                else {
+                } else {
                     const textBody = t.replace(mapUrl + "\n", "");
-                    url = `https://t.me/share/url?url=${encodeURIComponent(
-                        mapUrl
-                    )}&text=${encodeURIComponent(textBody)}`;
+                    url = `https://t.me/share/url?url=${encodeURIComponent(mapUrl)}&text=${encodeURIComponent(textBody)}`;
                 }
-
-                const isMobile =
-                    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-                        navigator.userAgent
-                    );
-
-                if (isMobile) {
+                if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
                     window.location.href = url;
                 } else {
                     window.open(url, "_blank");
                 }
             }
 
-            // 貼上功能
             function pasteInput() {
                 if (navigator.clipboard && navigator.clipboard.readText) {
-                    navigator.clipboard
-                        .readText()
-                        .then((text) => {
-                            document.getElementById("rawInput").value = text;
-                        })
-                        .catch((err) => {
-                            alert("無法讀取剪貼簿，請手動貼上 (需允許瀏覽器權限)");
-                        });
+                    navigator.clipboard.readText()
+                        .then((text) => { document.getElementById("rawInput").value = text; })
+                        .catch(() => alert("無法讀取剪貼簿，請手動貼上 (需允許瀏覽器權限)"));
                 } else {
                     alert("您的瀏覽器不支援自動貼上，請長按輸入框手動貼上。");
                 }
             }
 
-            // 清空功能
             function clearInput() {
                 document.getElementById("rawInput").value = "";
                 document.getElementById("rawInput").focus();
             }
 
-            // 歷史紀錄管理
             function addHistory() {
                 const now = new Date().toLocaleString("zh-TW", { hour12: false });
-                const isDup = history.some(
-                    (h) =>
-                        h.lat === data.lat &&
-                        h.lng === data.lng &&
-                        h.phone === data.phone &&
-                        h.reqTime === data.reqTime &&
-                        h.regTime === data.regTime &&
-                        h.addrLat === data.addrLat &&
-                        h.addrLng === data.addrLng
-                );
-                if (isDup) {
-                    const dupItem = history.find(
-                        (h) =>
-                            h.lat === data.lat &&
-                            h.lng === data.lng &&
-                            h.phone === data.phone &&
-                            h.reqTime === data.reqTime &&
-                            h.regTime === data.regTime &&
-                            h.addrLat === data.addrLat &&
-                            h.addrLng === data.addrLng
-                    );
-                    if (dupItem) currentHistoryId = dupItem.id;
+                const isSameRecord = (h) =>
+                    h.lat === data.lat &&
+                    h.lng === data.lng &&
+                    h.phone === data.phone &&
+                    h.reqTime === data.reqTime &&
+                    h.regTime === data.regTime &&
+                    h.addrLat === data.addrLat &&
+                    h.addrLng === data.addrLng;
+                const dupItem = history.find(isSameRecord);
+                if (dupItem) {
+                    currentHistoryId = dupItem.id;
                     return;
                 }
 

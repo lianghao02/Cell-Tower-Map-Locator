@@ -1,15 +1,28 @@
-# 📡 基地台地圖即時定位工具 (v3.1)
+# 📡 基地台地圖即時定位工具 (v3.1.1)
 
-[![Version](https://img.shields.io/badge/version-v3.1-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.1.1-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
 
 ## 🏆 v3.1 里程碑：多組基地台批次定位與時序軌跡繪製
 
 ## 📖 重大更新摘要 (Summary)
 
-本版本為基地台地理資訊定位系統之軍規級重構版本，新增多組基地台批次解析與時序軌跡動態連線功能。
+本版本新增多組基地台批次解析、時序軌跡與 GMLC 定位點顯示。
 
-舊版電信調閱單分析工具僅能單筆查詢基地台位置，面對上千筆通聯紀錄時，專案人員必須重複複製經緯度，無法直觀還原嫌犯之逃逸路線與時間序列。本版透過獨家 Regex 多格式解析器與 Leaflet.js 時序繪圖引擎，能在 **2 秒內** 自動解析 5 家電信業者格式，並將數百組經緯度精準繪製為具備時間箭頭之警務追蹤地圖。
+工具使用 Regex 多格式解析器與 Leaflet.js 繪圖，將調閱文字中的座標、方位與時間轉為可人工核對的地圖標記。實際解析能力取決於來源格式，結果仍須對照電信業者正式回覆。
+
+## 🔐 隱私與使用限制
+
+- 分享連結使用 URL fragment，只包含地圖所需座標，不帶門號、定位時間或地址名稱。
+- 歷史紀錄與顯示設定儲存在瀏覽器 `localStorage`；毀損資料會安全重設。
+- 地圖底圖與地址搜尋需要網路，案件資料應依機關規範處理。
+- 動態匯入文字會先做 HTML 逸出，降低 XSS 風險。
+
+## 🧪 驗證
+
+```powershell
+node --check js/app.js
+```
 
 ## ✨ 重點更新特色
 
