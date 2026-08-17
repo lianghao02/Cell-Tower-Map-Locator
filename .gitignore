@@ -6,3 +6,5 @@ build/
 Thumbs.db
 .vscode/
 *.log
+python_embed/
+python-embed/
