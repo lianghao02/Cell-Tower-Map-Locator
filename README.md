@@ -1,7 +1,15 @@
-# 📡 基地台地圖即時定位工具 (v3.1.1)
+# 📡 基地台地圖即時定位工具 (v3.1.2)
 
-[![Version](https://img.shields.io/badge/version-v3.1.1-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.1.2-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
+
+## 下載、依賴與執行
+
+- **安裝**：不需安裝 Python 或 Node.js；下載 ZIP、解壓後開啟 `index.html`，也可使用 GitHub Pages。
+- **外部依賴**：Leaflet 1.9.4、Tailwind CSS、Font Awesome 6.4.2 與 Google Fonts 由 CDN 載入；地圖圖磚與地址搜尋也需要網路。
+- **功能**：解析多家電信調閱資料、顯示基地台扇形、GMLC 點位、時序軌跡與分享視圖。
+- **打包／部署**：本專案是靜態網站，不需建置；將 `index.html`、`js/` 與其他資源完整放上任一靜態網站空間即可。
+- **開發檢查**：Node.js 只用於執行 `node --check js/app.js`，不是使用者執行依賴。
 
 ## 🏆 v3.1 里程碑：多組基地台批次定位與時序軌跡繪製
 
