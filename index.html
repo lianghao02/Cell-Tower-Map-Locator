@@ -300,20 +300,44 @@
     <!-- 4. 前台懸浮覆蓋層 (z-10, pointer-events-none 允許穿透操作地圖) -->
     <div class="fixed inset-0 z-10 pointer-events-none p-4 md:p-6 flex flex-col justify-between">
         
-        <!-- 左上角大一統控制台 -->
+        <!-- 左上角大一統控制台 (手機端自動轉為底部抽屜 Bottom Sheet) -->
         <div id="floating-console" class="absolute top-4 md:top-6 left-4 md:left-6 z-20 pointer-events-auto w-[360px] flex flex-col transition-all duration-300">
             <div id="console-card" class="bg-white/85 backdrop-blur-xl border border-white/60 rounded-2xl shadow-2xl p-4 flex flex-col overflow-hidden max-h-[calc(100vh-80px)]">
                 
-                <!-- 系統標題與設定按鈕 -->
-                <div class="flex justify-between items-center pb-3 border-b border-slate-200/60 mb-3">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-user-shield text-accent text-lg animate-pulse"></i>
-                        <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.1.2</span></h1>
-                    </div>
-                    <button id="btnToggleConfig" class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 border-none bg-transparent cursor-pointer flex items-center" title="進階設定">
-                        <i class="fa-solid fa-gear text-base"></i>
-                    </button>
+                <!-- 手機端頂部拉把 (Handle Bar) -->
+                <div class="sheet-handle-bar justify-center items-center py-1 -mt-1 mb-1 cursor-pointer select-none" onclick="app.toggleConsole()">
+                    <div class="w-10 h-1.5 bg-slate-300/80 rounded-full hover:bg-slate-400 transition-colors"></div>
                 </div>
+
+                <!-- 手機端收合狀態摘要列 (點擊一鍵展開) -->
+                <div class="sheet-collapsed-summary items-center justify-between py-1 cursor-pointer" onclick="app.toggleConsole(false)">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <i class="fa-solid fa-tower-cell text-accent text-sm"></i>
+                        <span id="sheetSummaryText" class="text-xs font-bold text-slate-700 truncate">點擊展開查詢控制台</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <span class="text-[11px] text-accent font-semibold px-2 py-0.5 bg-accent/10 rounded-full">展開 <i class="fa-solid fa-chevron-up text-[10px]"></i></span>
+                    </div>
+                </div>
+
+                <!-- 可展開之主要表單內容 -->
+                <div class="sheet-expandable-content flex flex-col flex-1 overflow-hidden space-y-3">
+                    <!-- 系統標題與設定按鈕 -->
+                    <div class="flex justify-between items-center pb-3 border-b border-slate-200/60">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-user-shield text-accent text-lg animate-pulse"></i>
+                            <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.1.3</span></h1>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <!-- 手機端快速收合按鈕 -->
+                            <button class="md:hidden text-slate-400 hover:text-primary transition-colors p-1 border-none bg-transparent cursor-pointer flex items-center" onclick="app.toggleConsole(true)" title="收合抽屜">
+                                <i class="fa-solid fa-chevron-down text-sm"></i>
+                            </button>
+                            <button id="btnToggleConfig" class="text-slate-400 hover:text-primary transition-colors hover:rotate-45 p-1 border-none bg-transparent cursor-pointer flex items-center" title="進階設定">
+                                <i class="fa-solid fa-gear text-base"></i>
+                            </button>
+                        </div>
+                    </div>
 
                 <!-- Tabs 標籤選單 -->
                 <div class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
@@ -539,11 +563,25 @@
                         <ul id="list" class="m-0 p-0 list-none max-h-[220px] overflow-y-auto pr-1"></ul>
                     </div>
                 </div>
+                </div><!-- end sheet-expandable-content -->
             </div>
 
             <!-- 懸浮向左收合拉手按鈕 -->
             <button id="btnToggleConsole" class="absolute -right-7 top-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-md border border-white/60 text-slate-500 w-7 h-14 rounded-r-xl shadow-lg flex items-center justify-center cursor-pointer transition-all hover:bg-white hover:text-accent pointer-events-auto" onclick="app.toggleConsole()">
                 <i class="fa-solid fa-chevron-left text-xs" id="console-arrow"></i>
+            </button>
+        </div>
+
+        <!-- 右側懸浮戰術功能按鈕組 (GPS 自身定位 & 手機端控制台展開 FAB) -->
+        <div class="fixed right-4 bottom-20 md:bottom-8 z-30 flex flex-col gap-2.5 pointer-events-auto">
+            <!-- 1. GPS 自身定位按鈕 -->
+            <button id="btnMyLocation" class="w-12 h-12 bg-white/95 hover:bg-white text-slate-700 hover:text-accent rounded-full shadow-xl border border-white/80 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 group" onclick="app.locateMe()" title="我的目前位置 (GPS)">
+                <i class="fa-solid fa-location-crosshairs text-lg text-accent group-hover:rotate-45 transition-transform" id="iconMyLocation"></i>
+            </button>
+            
+            <!-- 2. 手機版控制台喚起 FAB -->
+            <button id="btnOpenSheetFab" class="md:hidden w-12 h-12 bg-accent hover:bg-blue-600 text-white rounded-full shadow-xl border border-white/60 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95" onclick="app.toggleConsole(false)" title="展開查詢控制台">
+                <i class="fa-solid fa-magnifying-glass-location text-base"></i>
             </button>
         </div>
 

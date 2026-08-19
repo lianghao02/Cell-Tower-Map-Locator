@@ -14,6 +14,8 @@
             let multiTowerLayers = []; // 多點模式圖層集合 (Markers, Polygons, PathLines)
             let isMapSelectActive = false; // 地圖選點模式狀態
             let currentHistoryId = null; // 當前歷史紀錄 ID 追蹤
+            let myLocationMarker = null, myLocationCircle = null, myLocationLine = null; // GPS 自身定位圖層
+            let myCoords = null; // { lat, lng, accuracy }
             // 資料模型 (包含 reqTime, regTime, 以及目標地址資料與多點 towers)
             let data = {
                 lat: null,
@@ -101,6 +103,21 @@
                     initDrawer(); // 側邊抽屜事件只綁定一次
                     syncConsoleToggleIcon();
                     window.addEventListener("resize", syncConsoleToggleIcon);
+
+                    // 隔離控制台與 FAB 之 Leaflet 手勢事件冒泡，防止操作表單時拖動地圖
+                    const consoleEl = document.getElementById("floating-console");
+                    if (consoleEl && typeof L !== "undefined" && L.DomEvent) {
+                        L.DomEvent.disableScrollPropagation(consoleEl);
+                        L.DomEvent.disableClickPropagation(consoleEl);
+                    }
+                    const myLocBtn = document.getElementById("btnMyLocation");
+                    if (myLocBtn && typeof L !== "undefined" && L.DomEvent) {
+                        L.DomEvent.disableClickPropagation(myLocBtn);
+                    }
+                    const openSheetBtn = document.getElementById("btnOpenSheetFab");
+                    if (openSheetBtn && typeof L !== "undefined" && L.DomEvent) {
+                        L.DomEvent.disableClickPropagation(openSheetBtn);
+                    }
 
                     // 檢查網址參數 (分享連結開啟)
                     checkUrlParams();
@@ -563,6 +580,11 @@
                 syncUI();
                 updateMap(true, finalTowers.length > 1 ? "bounds" : "base"); // true = 存入歷史
                 switchTab('base'); // 自動切換至定位資料分頁
+
+                // 手機端解析成功後，自動收合抽屜以露出全螢幕地圖與動態軌跡
+                if (isMobileLayout()) {
+                    toggleConsole(true);
+                }
             }
 
             // 從輸入框更新資料
@@ -1502,13 +1524,30 @@
                 }
             }
 
-            // 懸浮控制台展開/折疊切換
+            // 手機版底部抽屜摘要更新
+            function updateSheetSummary() {
+                const summaryTextEl = document.getElementById("sheetSummaryText");
+                if (!summaryTextEl) return;
+
+                if (data.towers && data.towers.length > 0) {
+                    const count = data.towers.length;
+                    const ph = data.phone ? `📱 ${data.phone}` : `📍 ${data.lat}, ${data.lng}`;
+                    summaryTextEl.innerText = `${ph} (共 ${count} 筆軌跡)`;
+                } else if (data.lat !== null && data.lng !== null) {
+                    const ph = data.phone ? `📱 ${data.phone}` : `📍 ${data.lat}, ${data.lng}`;
+                    summaryTextEl.innerText = ph;
+                } else {
+                    summaryTextEl.innerText = "點擊展開智慧解析與定位控制台";
+                }
+            }
+
+            // 懸浮控制台展開/折疊切換 (桌機向左收合、手機底部抽屜收合)
             function syncConsoleToggleIcon() {
                 const el = document.getElementById("floating-console");
                 const arrow = document.getElementById("console-arrow");
                 if (!el || !arrow) return;
 
-                const isCollapsed = el.classList.contains("collapsed");
+                const isCollapsed = el.classList.contains("collapsed") || el.classList.contains("is-sheet-collapsed");
                 arrow.classList.remove("fa-chevron-left", "fa-chevron-right", "fa-chevron-up", "fa-chevron-down");
                 if (isMobileLayout()) {
                     arrow.classList.add(isCollapsed ? "fa-chevron-up" : "fa-chevron-down");
@@ -1521,19 +1560,143 @@
                 const el = document.getElementById("floating-console");
                 if (!el) return;
 
-                const isCollapsed = el.classList.contains("collapsed");
+                const isCollapsed = el.classList.contains("collapsed") || el.classList.contains("is-sheet-collapsed");
                 const shouldCollapse = (forceState !== undefined) ? forceState : !isCollapsed;
 
                 if (shouldCollapse) {
-                    el.classList.add("collapsed");
+                    el.classList.add("collapsed", "is-sheet-collapsed");
+                    updateSheetSummary();
                 } else {
-                    el.classList.remove("collapsed");
+                    el.classList.remove("collapsed", "is-sheet-collapsed");
                 }
                 syncConsoleToggleIcon();
 
                 if (map) {
                     setTimeout(() => map.invalidateSize(), 320);
                 }
+            }
+
+            // 自身 GPS 地理定位與戰術距離連線
+            function locateMe() {
+                if (!navigator.geolocation) {
+                    return alert("您的瀏覽器或裝置不支援 GPS 地理定位功能。");
+                }
+
+                const btn = document.getElementById("btnMyLocation");
+                const icon = document.getElementById("iconMyLocation");
+                if (icon) {
+                    icon.classList.remove("fa-location-crosshairs");
+                    icon.classList.add("fa-spinner", "animate-spin");
+                }
+                if (btn) btn.disabled = true;
+
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        if (icon) {
+                            icon.classList.remove("fa-spinner", "animate-spin");
+                            icon.classList.add("fa-location-crosshairs");
+                        }
+                        if (btn) btn.disabled = false;
+
+                        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+                        const lng = parseFloat(pos.coords.longitude.toFixed(6));
+                        const accuracy = Math.round(pos.coords.accuracy);
+                        myCoords = { lat, lng, accuracy };
+
+                        // 移除舊自身定位圖層
+                        if (myLocationMarker && map) map.removeLayer(myLocationMarker);
+                        if (myLocationCircle && map) map.removeLayer(myLocationCircle);
+                        if (myLocationLine && map) map.removeLayer(myLocationLine);
+
+                        // 1. 建立脈衝藍點 Marker
+                        const pulseIcon = L.divIcon({
+                            html: '<div class="my-location-pulse"><div class="ring"></div><div class="dot"></div></div>',
+                            className: 'custom-my-location-marker',
+                            iconSize: [22, 22],
+                            iconAnchor: [11, 11]
+                        });
+
+                        // 計算與基地台之相對距離與方位
+                        const hasBase = data.lat !== null && data.lng !== null;
+                        let distanceInfo = "";
+                        let navUrl = "";
+
+                        if (hasBase && map) {
+                            const dist = Math.round(map.distance([lat, lng], [data.lat, data.lng]));
+                            const bearing = Math.round(calculateBearing(lat, lng, data.lat, data.lng));
+                            const distText = dist >= 1000 ? `${(dist / 1000).toFixed(2)} 公里` : `${dist} 公尺`;
+                            distanceInfo = `📏 距離目前基地台: <b>${distText}</b> (🧭 ${bearing}°)`;
+                            navUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${data.lat},${data.lng}`;
+
+                            // 繪製青藍色戰術虛線連線
+                            myLocationLine = L.polyline([[lat, lng], [data.lat, data.lng]], {
+                                color: "#0284c7",
+                                weight: 2.5,
+                                dashArray: "5, 5",
+                                opacity: 0.85
+                            }).addTo(map);
+                            myLocationLine.bindTooltip(`📍 我的位置 ➔ 基地台: ${distText}`, { permanent: false, direction: "center" });
+                        }
+
+                        let popupContent = `
+                            <div class="text-xs space-y-1 p-0.5">
+                                <div class="font-bold text-accent flex items-center gap-1">
+                                    <i class="fa-solid fa-location-crosshairs"></i> 我的目前位置 (GPS)
+                                </div>
+                                <div class="font-mono text-slate-700">${lat}, ${lng}</div>
+                                <div class="text-[11px] text-slate-500">🎯 定位精準度: ±${accuracy} 公尺</div>
+                                ${distanceInfo ? `<div class="text-[11px] text-sky-700 font-semibold bg-sky-50 p-1 rounded border border-sky-200 mt-1">${distanceInfo}</div>` : ""}
+                                ${navUrl ? `
+                                    <div class="pt-1.5 border-t border-slate-200 mt-1">
+                                        <a href="${navUrl}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 bg-accent text-white rounded-lg text-[11px] font-bold hover:bg-blue-600 no-underline shadow-sm">
+                                            <i class="fa-solid fa-diamond-turn-right"></i> Google Maps 導航前往基地台
+                                        </a>
+                                    </div>` : ""}
+                            </div>
+                        `;
+
+                        if (map) {
+                            myLocationMarker = L.marker([lat, lng], { icon: pulseIcon }).addTo(map).bindPopup(popupContent);
+                            
+                            // 2. 建立 GPS 誤差半徑圓圈
+                            myLocationCircle = L.circle([lat, lng], {
+                                radius: accuracy,
+                                color: "#0284c7",
+                                fillColor: "#38bdf8",
+                                fillOpacity: 0.12,
+                                weight: 1
+                            }).addTo(map);
+
+                            myLocationMarker.openPopup();
+
+                            // 3. 視角對焦：若有基地台，同時將自身與基地台納入可視範圍
+                            if (hasBase) {
+                                const bounds = L.latLngBounds([[lat, lng], [data.lat, data.lng]]);
+                                map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 });
+                            } else {
+                                map.setView([lat, lng], 16);
+                            }
+                        }
+                    },
+                    (err) => {
+                        if (icon) {
+                            icon.classList.remove("fa-spinner", "animate-spin");
+                            icon.classList.add("fa-location-crosshairs");
+                        }
+                        if (btn) btn.disabled = false;
+
+                        let msg = "無法取得您的 GPS 位置。";
+                        if (err.code === err.PERMISSION_DENIED) {
+                            msg = "定位權限已被拒絕。若需使用此功能，請在瀏覽器網址列或系統設定中允許取用位置資訊。";
+                        } else if (err.code === err.POSITION_UNAVAILABLE) {
+                            msg = "目前無法獲取 GPS 訊號（可能位於室內、地下室或收訊死角）。";
+                        } else if (err.code === err.TIMEOUT) {
+                            msg = "GPS 定位連線逾時，請至收訊良好處重試。";
+                        }
+                        alert(msg);
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+                );
             }
 
             // 公開介面 (Public API)
@@ -1553,6 +1716,7 @@
                 clearAddress,
                 switchTab,
                 toggleConsole,
+                locateMe,
             };
         })();
 
