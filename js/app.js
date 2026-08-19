@@ -61,7 +61,7 @@
             const HISTORY_STORAGE_KEY = "cell_locate_v1_db";
 
             function isMobileLayout() {
-                return window.matchMedia("(max-width: 767px)").matches;
+                return window.matchMedia("(max-width: 768px)").matches;
             }
 
             function getFitBoundsOptions() {

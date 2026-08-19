@@ -75,29 +75,38 @@
                 margin: 0 !important;
                 padding: 0 !important;
                 padding-bottom: env(safe-area-inset-bottom, 8px) !important;
-                z-index: 30 !important;
+                z-index: 40 !important;
                 transform: none !important;
-                transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease !important;
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
             }
 
             #console-card {
-                border-radius: 24px 24px 0 0 !important;
+                width: 100% !important;
                 max-height: 75dvh !important;
-                box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.12) !important;
+                border-radius: 20px 20px 0 0 !important;
+                box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.15) !important;
                 border-bottom: none !important;
                 border-left: none !important;
                 border-right: none !important;
-                padding: 12px 16px 16px 16px !important;
+                padding: 8px 16px 16px 16px !important;
+                transition: max-height 0.3s ease, padding 0.3s ease !important;
             }
 
-            /* 手機端收合狀態 (僅露出頂部摘要列約 64px) */
+            /* 手機端收合狀態 (僅露出頂部摘要列約 60px，貼合底部) */
+            #floating-console.collapsed #console-card,
             #floating-console.is-sheet-collapsed #console-card {
-                max-height: 64px !important;
+                max-height: 60px !important;
                 overflow: hidden !important;
+                padding-top: 6px !important;
+                padding-bottom: 6px !important;
             }
+
+            #floating-console.collapsed .sheet-expandable-content,
             #floating-console.is-sheet-collapsed .sheet-expandable-content {
                 display: none !important;
             }
+
+            #floating-console.collapsed .sheet-collapsed-summary,
             #floating-console.is-sheet-collapsed .sheet-collapsed-summary {
                 display: flex !important;
             }
