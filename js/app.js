@@ -1647,8 +1647,8 @@
                                 <div class="text-[11px] text-slate-500">🎯 定位精準度: ±${accuracy} 公尺</div>
                                 ${distanceInfo ? `<div class="text-[11px] text-sky-700 font-semibold bg-sky-50 p-1 rounded border border-sky-200 mt-1">${distanceInfo}</div>` : ""}
                                 ${navUrl ? `
-                                    <div class="pt-1.5 border-t border-slate-200 mt-1">
-                                        <a href="${navUrl}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 bg-accent text-white rounded-lg text-[11px] font-bold hover:bg-blue-600 no-underline shadow-sm">
+                                    <div class="pt-2 border-t border-slate-200 mt-1">
+                                        <a href="${navUrl}" target="_blank" class="btn-nav-gmap" title="開啟 Google Maps 路線導航">
                                             <i class="fa-solid fa-diamond-turn-right"></i> Google Maps 導航前往基地台
                                         </a>
                                     </div>` : ""}
