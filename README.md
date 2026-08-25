@@ -1,21 +1,25 @@
-# 📡 基地台地圖即時定位工具 (v3.1.2)
+# 📡 基地台地圖即時定位工具 (v3.1.3)
 
-[![Version](https://img.shields.io/badge/version-v3.1.2-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.1.3-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
+
+## 技術架構現況（2026-08-24）
+
+本專案主力為 **HTML5／Vanilla JavaScript／Leaflet** 靜態網站，保留免建置、可直接部署的優勢。現階段不遷移至 C#、Rust 或 Tauri；若日後需要離線安裝體驗，優先以 PWA 強化，不改寫既有地圖與解析邏輯。
 
 ## 下載、依賴與執行
 
 - **安裝**：不需安裝 Python 或 Node.js；下載 ZIP、解壓後開啟 `index.html`，也可使用 GitHub Pages。
 - **外部依賴**：Leaflet 1.9.4、Tailwind CSS、Font Awesome 6.4.2 與 Google Fonts 由 CDN 載入；地圖圖磚與地址搜尋也需要網路。
-- **功能**：解析多家電信調閱資料、顯示基地台扇形、GMLC 點位、時序軌跡與分享視圖。
+- **功能**：解析多家電信調閱資料、顯示基地台扇形、GMLC 點位、時序軌跡、自身 GPS 藍光定位與現地戰術導航。
 - **打包／部署**：本專案是靜態網站，不需建置；將 `index.html`、`js/` 與其他資源完整放上任一靜態網站空間即可。
 - **開發檢查**：Node.js 只用於執行 `node --check js/app.js`，不是使用者執行依賴。
 
-## 🏆 v3.1 里程碑：多組基地台批次定位與時序軌跡繪製
+## 🏆 v3.1.3 重點特色：行動端抽屜、GPS 脈衝與現地戰術導航
 
 ## 📖 重大更新摘要 (Summary)
 
-本版本新增多組基地台批次解析、時序軌跡與 GMLC 定位點顯示。
+本版本新增手機端響應式底部抽屜（Bottom Sheet）、自身 GPS 藍光脈衝定位、現地戰術直線距離與 Google Maps 導航前往基地台。
 
 工具使用 Regex 多格式解析器與 Leaflet.js 繪圖，將調閱文字中的座標、方位與時間轉為可人工核對的地圖標記。實際解析能力取決於來源格式，結果仍須對照電信業者正式回覆。
 
