@@ -14,8 +14,21 @@
             let multiTowerLayers = []; // 多點模式圖層集合 (Markers, Polygons, PathLines)
             let isMapSelectActive = false; // 地圖選點模式狀態
             let currentHistoryId = null; // 當前歷史紀錄 ID 追蹤
+            let selectedHistoryIds = new Set(); // 多選歷史紀錄 ID 集合 (用於多筆疊加比對)
             let myLocationMarker = null, myLocationCircle = null, myLocationLine = null; // GPS 自身定位圖層
             let myCoords = null; // { lat, lng, accuracy }
+
+            // 歷史比對多色調色盤 (高辨識度莫蘭迪 / 鮮明對比色)
+            const COMPARE_COLORS = [
+                { border: "#2563eb", fill: "#3b82f6", badge: "#2563eb", name: "寶藍" },
+                { border: "#059669", fill: "#10b981", badge: "#059669", name: "翡翠綠" },
+                { border: "#d97706", fill: "#f59e0b", badge: "#d97706", name: "琥珀橘" },
+                { border: "#7c3aed", fill: "#8b5cf6", badge: "#7c3aed", name: "紫羅蘭" },
+                { border: "#db2777", fill: "#ec4899", badge: "#db2777", name: "玫瑰紅" },
+                { border: "#0891b2", fill: "#06b6d4", badge: "#0891b2", name: "青藍" },
+                { border: "#4b5563", fill: "#6b7280", badge: "#4b5563", name: "石墨灰" }
+            ];
+
             // 資料模型 (包含 reqTime, regTime, 以及目標地址資料與多點 towers)
             let data = {
                 lat: null,
@@ -93,10 +106,15 @@
                     }
                     renderHistory();
 
-                    // 監聽輸入框變更
+                    // 監聽輸入框變更 (change 與 input 即時響應，確保手動輸入方位角即時繪製)
                     ["lat", "lng", "phone", "azi", "reqTime", "regTime", "addrLat", "addrLng", "targetAddr"].forEach((id) => {
                         const el = document.getElementById(id);
-                        if (el) el.addEventListener("change", () => updateFromInput(false));
+                        if (el) {
+                            el.addEventListener("change", () => updateFromInput(false));
+                            if (id === "lat" || id === "lng" || id === "azi") {
+                                el.addEventListener("input", () => updateFromInput(false));
+                            }
+                        }
                     });
 
                     syncConfigToUI();
@@ -587,18 +605,29 @@
                 }
             }
 
-            // 從輸入框更新資料
+            // 從輸入框更新資料 (支援手動輸入方位角角度並即時重繪扇形)
             function updateFromInput(save = false) {
-                const lat = parseFloat(document.getElementById("lat").value);
-                const lng = parseFloat(document.getElementById("lng").value);
-                const az = parseFloat(document.getElementById("azi").value);
-                const ph = document.getElementById("phone").value;
-                const req = document.getElementById("reqTime").value;
-                const reg = document.getElementById("regTime").value;
-                
-                const addrLatVal = parseFloat(document.getElementById("addrLat").value);
-                const addrLngVal = parseFloat(document.getElementById("addrLng").value);
-                const addrNameVal = document.getElementById("targetAddr").value;
+                const latEl = document.getElementById("lat");
+                const lngEl = document.getElementById("lng");
+                const azEl = document.getElementById("azi");
+                const phEl = document.getElementById("phone");
+                const reqEl = document.getElementById("reqTime");
+                const regEl = document.getElementById("regTime");
+
+                const addrLatEl = document.getElementById("addrLat");
+                const addrLngEl = document.getElementById("addrLng");
+                const targetAddrEl = document.getElementById("targetAddr");
+
+                const lat = latEl ? parseFloat(latEl.value) : NaN;
+                const lng = lngEl ? parseFloat(lngEl.value) : NaN;
+                const az = (azEl && azEl.value.trim() !== "") ? parseFloat(azEl.value) : NaN;
+                const ph = phEl ? phEl.value : "";
+                const req = reqEl ? reqEl.value : "";
+                const reg = regEl ? regEl.value : "";
+
+                const addrLatVal = addrLatEl ? parseFloat(addrLatEl.value) : NaN;
+                const addrLngVal = addrLngEl ? parseFloat(addrLngEl.value) : NaN;
+                const addrNameVal = targetAddrEl ? targetAddrEl.value : "";
 
                 if (!isNaN(lat) && !isNaN(lng)) {
                     data.lat = lat;
@@ -610,8 +639,29 @@
                     data.addrLat = isNaN(addrLatVal) ? null : addrLatVal;
                     data.addrLng = isNaN(addrLngVal) ? null : addrLngVal;
                     data.addrName = addrNameVal || "";
-                    
+
+                    // 核心關鍵修正：手動修改單點時，同步覆寫 data.towers 陣列，確保扇形與點位正確繪製
+                    data.towers = [{
+                        lat: data.lat,
+                        lng: data.lng,
+                        azi: data.azi,
+                        phone: data.phone,
+                        reqTime: data.reqTime,
+                        regTime: data.regTime
+                    }];
+
+                    // 若原本在多選歷史比對模式下進行手動編輯，回歸單點模式
+                    if (selectedHistoryIds.size > 0) {
+                        selectedHistoryIds.clear();
+                        renderHistory();
+                    }
+
                     updateMap(save, "base");
+
+                    // 若主動按下「套用變更並重繪」，手機版收合抽屜以露出全螢幕地圖
+                    if (save && isMobileLayout()) {
+                        toggleConsole(true);
+                    }
                 }
             }
 
@@ -840,7 +890,7 @@
                 }
             }
 
-            // 更新地圖與歷史紀錄 (v3.1 多點軌跡與寶藍清透扇形疊加)
+            // 更新地圖與歷史紀錄 (支援單點/批次軌跡與多筆歷史疊加比對)
             function updateMap(save, focusType) {
                 const mapDiv = document.getElementById("map");
                 const mapContainer = document.getElementById("map-container");
@@ -857,37 +907,17 @@
                 if (marker) { map.removeLayer(marker); marker = null; }
                 if (sector) { map.removeLayer(sector); sector = null; }
 
-                // 確保相容 single / multi towers
-                let towers = data.towers && data.towers.length > 0 ? data.towers : [];
-                if (towers.length === 0 && data.lat !== null && data.lng !== null) {
-                    towers = [{
-                        lat: data.lat, lng: data.lng, azi: data.azi,
-                        phone: data.phone, reqTime: data.reqTime, regTime: data.regTime
-                    }];
-                    data.towers = towers;
-                }
-
-                renderMultiTowerList();
-
-                const hasBase = towers.length > 0;
-                const hasAddr = data.addrLat !== null && data.addrLng !== null;
-
                 // 智慧中心點計算
                 let centerLat = 23.6978;
                 let centerLng = 120.9605;
                 let defaultZoom = 8;
 
-                if (hasBase) {
-                    centerLat = towers[0].lat;
-                    centerLng = towers[0].lng;
-                    defaultZoom = config.defaultZoom;
-                } else if (hasAddr) {
-                    centerLat = data.addrLat;
-                    centerLng = data.addrLng;
-                    defaultZoom = config.defaultZoom;
-                }
-
                 if (!map) {
+                    if (data.lat !== null && data.lng !== null) {
+                        centerLat = data.lat;
+                        centerLng = data.lng;
+                        defaultZoom = config.defaultZoom;
+                    }
                     map = L.map("map", { maxZoom: 22 }).setView([centerLat, centerLng], defaultZoom);
                     L.tileLayer(config.mapTileUrl, {
                         maxZoom: 22,
@@ -918,6 +948,37 @@
                     }
                 }
 
+                // --- 模式分支 A：多筆歷史紀錄疊加比對模式 (當選取 >= 2 筆時) ---
+                if (selectedHistoryIds.size >= 2) {
+                    renderMultiHistoryComparison();
+                    return;
+                }
+
+                // --- 模式分支 B：一般單筆 / 多點軌跡模式 ---
+                let towers = data.towers && data.towers.length > 0 ? data.towers : [];
+                if (towers.length === 0 && data.lat !== null && data.lng !== null) {
+                    towers = [{
+                        lat: data.lat, lng: data.lng, azi: data.azi,
+                        phone: data.phone, reqTime: data.reqTime, regTime: data.regTime
+                    }];
+                    data.towers = towers;
+                }
+
+                renderMultiTowerList();
+
+                const hasBase = towers.length > 0;
+                const hasAddr = data.addrLat !== null && data.addrLng !== null;
+
+                if (hasBase) {
+                    centerLat = towers[0].lat;
+                    centerLng = towers[0].lng;
+                    defaultZoom = config.defaultZoom;
+                } else if (hasAddr) {
+                    centerLat = data.addrLat;
+                    centerLng = data.addrLng;
+                    defaultZoom = config.defaultZoom;
+                }
+
                 // 收集所有點位計算 Bounds
                 const allCoords = [];
                 if (hasAddr) allCoords.push([data.addrLat, data.addrLng]);
@@ -931,7 +992,7 @@
                         if (t.phone) popupText += `<br>門號: ${esc(t.phone)}`;
                         if (t.reqTime) popupText += `<br>🕒 請求: ${esc(t.reqTime)}`;
                         if (t.regTime) popupText += `<br>📡 註冊: ${esc(t.regTime)}`;
-                        if (t.azi !== null) popupText += `<br>🧭 方位: ${esc(t.azi)}°`;
+                        if (t.azi !== null && t.azi !== undefined && !isNaN(t.azi)) popupText += `<br>🧭 方位: ${esc(t.azi)}°`;
 
                         let m;
                         if (towers.length > 1) {
@@ -947,7 +1008,7 @@
                         } else {
                             // 單點模式
                             m = L.marker([t.lat, t.lng]).addTo(map).bindPopup(popupText);
-                            if (i === 0) m.openPopup();
+                            if (i === 0 && focusType !== "addr") m.openPopup();
                         }
                         multiTowerLayers.push(m);
 
@@ -969,7 +1030,7 @@
                         }
 
                         // 繪製寶藍色 15% 清透扇形 (Alpha 疊加，重疊區域自動加深色調不蓋圖)
-                        if (t.azi !== null && t.azi !== undefined) {
+                        if (t.azi !== null && t.azi !== undefined && !isNaN(t.azi)) {
                             const r = config.sectorRadius;
                             const halfApp = config.sectorAperture / 2;
                             const startAngle = (t.azi - halfApp) * (Math.PI / 180);
@@ -1230,7 +1291,7 @@
                 if (data.phone) t += `定位門號: ${data.phone}\n`;
                 if (data.reqTime) t += `定位時間: ${data.reqTime}\n`;
                 if (data.regTime) t += `註冊時間: ${data.regTime}\n`;
-                t += `定位經緯度: ${data.lat}, ${data.lng}`;
+t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 if (data.azi !== null) t += ` (方位:${data.azi})`;
 
                 // 若有提供地址資訊，修正輸出文字，加上比對結果
@@ -1246,7 +1307,7 @@
                             : (isDirectionMatched
                                 ? `⚠️ 方向符合，但超出 ${config.sectorRadius} 公尺顯示半徑`
                                 : "❌ 位於發射扇形範圍外");
-                }
+                    }
 
                     t += `\n\n🏠 目標關連位置: ${data.addrName || "自訂位置"}`;
                     t += `\n📍 目標經緯度: ${data.addrLat}, ${data.addrLng}`;
@@ -1256,6 +1317,317 @@
 
                 t += `\n\n📌 專用圖台 (含扇形與地址):\n${appUrl}`;
                 return t;
+            }
+
+            // 繪製多筆歷史紀錄疊加比對圖層
+            function renderMultiHistoryComparison() {
+                if (addrMarker) { map.removeLayer(addrMarker); addrMarker = null; }
+                if (relationLine) { map.removeLayer(relationLine); relationLine = null; }
+                const analysisPanel = document.getElementById("analysisPanel");
+                if (analysisPanel) analysisPanel.classList.add("hidden");
+
+                const selectedItems = history.filter(h => selectedHistoryIds.has(h.id));
+                const allCoords = [];
+
+                selectedItems.forEach((item, itemIdx) => {
+                    const colorObj = COMPARE_COLORS[itemIdx % COMPARE_COLORS.length];
+                    const numLabel = itemIdx + 1;
+                    const itemTowers = (item.towers && item.towers.length > 0) ? item.towers : [{
+                        lat: item.lat,
+                        lng: item.lng,
+                        azi: item.azi,
+                        phone: item.phone,
+                        reqTime: item.reqTime,
+                        regTime: item.regTime
+                    }];
+
+                    const hasItemAddr = item.addrLat !== null && item.addrLng !== null && item.addrLat !== undefined;
+                    if (hasItemAddr) {
+                        allCoords.push([item.addrLat, item.addrLng]);
+
+                        const addrBadgeHtml = `<div style="background-color: ${colorObj.fill}; border: 2px solid #ffffff;" class="w-6 h-6 rounded-full text-white font-mono font-bold text-[10px] flex items-center justify-center shadow-md"><i class="fa-solid fa-house"></i></div>`;
+                        const addrIcon = L.divIcon({
+                            html: addrBadgeHtml,
+                            className: 'custom-badge-icon',
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        });
+                        const aMarker = L.marker([item.addrLat, item.addrLng], { icon: addrIcon }).addTo(map);
+                        aMarker.bindPopup(`<b>🏠 歷史 #${numLabel} 目標地址</b><br>${esc(item.addrName || "自訂點")}<br>${esc(item.addrLat)}, ${esc(item.addrLng)}`);
+                        multiTowerLayers.push(aMarker);
+
+                        // 基地台與目標地址連線
+                        if (item.lat !== null && item.lng !== null) {
+                            const dist = Math.round(map.distance([item.lat, item.lng], [item.addrLat, item.addrLng]));
+                            const cLine = L.polyline([[item.lat, item.lng], [item.addrLat, item.addrLng]], {
+                                color: colorObj.border,
+                                weight: 2,
+                                dashArray: "5, 5",
+                                opacity: 0.8
+                            }).addTo(map);
+                            cLine.bindTooltip(`[#${numLabel}] 距離: ${dist}m`, { permanent: false, direction: "center" });
+                            multiTowerLayers.push(cLine);
+                        }
+                    }
+
+                    itemTowers.forEach((t, tIdx) => {
+                        if (t.lat === null || t.lng === null) return;
+                        allCoords.push([t.lat, t.lng]);
+
+                        const badgeHtml = `<div style="background-color: ${colorObj.fill}; border: 2px solid #ffffff;" class="w-7 h-7 rounded-full text-white font-mono font-bold text-xs flex items-center justify-center shadow-lg">#${numLabel}</div>`;
+                        const customIcon = L.divIcon({
+                            html: badgeHtml,
+                            className: 'custom-compare-icon',
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14]
+                        });
+
+                        let popupText = `<div class="space-y-1">
+                            <div class="font-bold flex items-center gap-1.5" style="color: ${colorObj.border}">
+                                <span>📍 歷史紀錄 #${numLabel} (${colorObj.name})</span>
+                            </div>
+                            <div class="font-mono text-slate-700">${esc(t.lat)}, ${esc(t.lng)}</div>
+                            ${item.time ? `<div class="text-[11px] text-slate-400">🕒 存檔時間: ${esc(item.time)}</div>` : ''}
+                            ${t.phone ? `<div class="text-[11px] text-accent font-semibold">📱 門號: ${esc(t.phone)}</div>` : ''}
+                            ${t.reqTime ? `<div class="text-[11px] text-slate-500">⏱️ 定位時間: ${esc(t.reqTime)}</div>` : ''}
+                            ${t.azi !== null && t.azi !== undefined && !isNaN(t.azi) ? `<div class="text-[11px] font-semibold" style="color: ${colorObj.border}">🧭 發射方位角: ${esc(t.azi)}°</div>` : ''}
+                        </div>`;
+
+                        const m = L.marker([t.lat, t.lng], { icon: customIcon }).addTo(map).bindPopup(popupText);
+                        multiTowerLayers.push(m);
+
+                        // 繪製專屬色系扇形
+                        if (t.azi !== null && t.azi !== undefined && !isNaN(t.azi)) {
+                            const r = config.sectorRadius;
+                            const halfApp = config.sectorAperture / 2;
+                            const startAngle = (t.azi - halfApp) * (Math.PI / 180);
+                            const endAngle = (t.azi + halfApp) * (Math.PI / 180);
+                            const points = [[t.lat, t.lng]];
+
+                            for (let k = 0; k <= 20; k++) {
+                                const angle = startAngle + (endAngle - startAngle) * (k / 20);
+                                const dLat = (r / 111320) * Math.cos(angle);
+                                const dLng = (r / (111320 * Math.cos(t.lat * (Math.PI / 180)))) * Math.sin(angle);
+                                points.push([t.lat + dLat, t.lng + dLng]);
+                            }
+                            points.push([t.lat, t.lng]);
+
+                            const secPoly = L.polygon(points, {
+                                color: colorObj.border,
+                                fillColor: colorObj.fill,
+                                fillOpacity: 0.18,
+                                weight: 2,
+                                opacity: 0.75
+                            }).addTo(map);
+
+                            secPoly.bindTooltip(`[#${numLabel} ${colorObj.name}] 方位: ${t.azi}°`, { permanent: false, direction: "center" });
+                            multiTowerLayers.push(secPoly);
+                        }
+                    });
+                });
+
+                if (allCoords.length > 0) {
+                    const bounds = L.latLngBounds(allCoords);
+                    map.fitBounds(bounds, getFitBoundsOptions());
+                }
+            }
+
+            // 切換單一歷史項目的勾選狀態 (多選比對不跳轉分頁)
+            function toggleHistorySelect(id, e) {
+                if (e) e.stopPropagation();
+
+                if (selectedHistoryIds.has(id)) {
+                    selectedHistoryIds.delete(id);
+                } else {
+                    selectedHistoryIds.add(id);
+                }
+
+                if (selectedHistoryIds.size === 1) {
+                    const singleId = Array.from(selectedHistoryIds)[0];
+                    const item = history.find(h => h.id === singleId);
+                    if (item) {
+                        data = {
+                            lat: item.lat,
+                            lng: item.lng,
+                            azi: item.azi,
+                            phone: item.phone,
+                            reqTime: item.reqTime,
+                            regTime: item.regTime,
+                            addrLat: item.addrLat !== undefined ? item.addrLat : null,
+                            addrLng: item.addrLng !== undefined ? item.addrLng : null,
+                            addrName: item.addrName !== undefined ? item.addrName : "",
+                            searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
+                            towers: Array.isArray(item.towers) && item.towers.length > 0 ? item.towers.map(tower => ({ ...tower })) : [{
+                                lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime
+                            }],
+                        };
+                        currentHistoryId = item.id;
+                        syncUI();
+                    }
+                }
+
+                updateMap(false, "bounds");
+                renderHistory();
+            }
+
+            // 全選歷史紀錄進行比對
+            function selectAllHistory() {
+                if (!history.length) return;
+                history.forEach(item => selectedHistoryIds.add(item.id));
+                updateMap(false, "bounds");
+                renderHistory();
+            }
+
+            // 清除歷史比對選取
+            function clearHistorySelection() {
+                selectedHistoryIds.clear();
+                updateMap(false);
+                renderHistory();
+            }
+
+            function deleteItem(id, e) {
+                if (e) e.stopPropagation();
+                history = history.filter((x) => x.id !== id);
+                if (currentHistoryId === id) currentHistoryId = null;
+                selectedHistoryIds.delete(id);
+                saveHistory();
+            }
+
+            // 清除歷史紀錄
+            function clearHistory(e) {
+                if (e) e.stopPropagation();
+                if (confirm("確定清空紀錄？")) {
+                    history = [];
+                    currentHistoryId = null;
+                    selectedHistoryIds.clear();
+                    saveHistory();
+                }
+            }
+
+            function saveHistory() {
+                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+                renderHistory();
+            }
+
+            function renderHistory() {
+                const ul = document.getElementById("list");
+                const compareCountEl = document.getElementById("historyCompareCount");
+                const compareNoticeEl = document.getElementById("historyCompareNotice");
+                const activeCountEl = document.getElementById("historyCompareActiveCount");
+
+                const count = selectedHistoryIds.size;
+                if (compareCountEl) compareCountEl.innerText = count;
+
+                if (compareNoticeEl) {
+                    if (count >= 2) {
+                        compareNoticeEl.classList.remove("hidden");
+                        if (activeCountEl) activeCountEl.innerText = count;
+                    } else {
+                        compareNoticeEl.classList.add("hidden");
+                    }
+                }
+
+                ul.innerHTML = "";
+                if (!history.length) {
+                    ul.innerHTML = '<li class="text-center p-5 text-[#aaa]">暫無紀錄</li>';
+                    return;
+                }
+
+                // 建立選中項目的順序色彩映射
+                const selectedList = history.filter(h => selectedHistoryIds.has(h.id));
+                const colorMap = new Map();
+                selectedList.forEach((item, idx) => {
+                    colorMap.set(item.id, {
+                        idx: idx + 1,
+                        color: COMPARE_COLORS[idx % COMPARE_COLORS.length]
+                    });
+                });
+
+                history.forEach((item) => {
+                    const isSelected = selectedHistoryIds.has(item.id);
+                    const colorInfo = colorMap.get(item.id);
+
+                    const li = document.createElement("li");
+                    li.className = isSelected
+                        ? "bg-white rounded-xl p-3 shadow-md border-2 border-blue-500 relative cursor-pointer hover:shadow-lg transition-all ring-2 ring-blue-400/20"
+                        : "bg-white/80 rounded-xl p-3 shadow-sm border border-slate-100 relative cursor-pointer hover:bg-white hover:border-accent/40 hover:shadow-md transition-all group";
+
+                    li.innerHTML = `
+                    <div class="flex items-start gap-2.5">
+                        <!-- 勾選框 -->
+                        <div class="pt-0.5" onclick="event.stopPropagation()">
+                            <input type="checkbox" ${isSelected ? "checked" : ""} class="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer" onclick="app.toggleHistorySelect(${item.id}, event)" title="勾選進行多筆比對">
+                        </div>
+
+                        <!-- 內容本體 -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-1 mb-1">
+                                <div class="flex items-center gap-1.5 overflow-hidden">
+                                    ${isSelected && colorInfo ? `<span style="background-color: ${colorInfo.color.badge}" class="text-white text-[10px] font-bold px-1.5 py-0.2 rounded font-mono shadow-xs">#${colorInfo.idx} ${colorInfo.color.name}</span>` : ""}
+                                    <span class="text-[0.7rem] font-medium text-slate-400 truncate">${esc(item.time)}</span>
+                                </div>
+                                <button class="text-slate-300 hover:text-del p-0.5 border-none bg-transparent cursor-pointer transition-colors" onclick="app.deleteItem(${item.id}, event)" title="刪除紀錄">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="font-bold text-primary text-[0.95rem] tracking-tight font-mono">${item.lat}, ${item.lng}</span>
+                                ${item.phone
+                                    ? `<span class="tag text-[0.7rem] font-medium py-0.5 px-1.5 rounded bg-accent/10 text-accent border border-accent/20 font-mono">${esc(item.phone)}</span>`
+                                    : ""
+                                }
+                            </div>
+
+                            <div class="flex flex-col gap-0.5 text-[0.75rem] text-slate-500">
+                                ${item.reqTime
+                                    ? `<div class="flex items-center gap-1.5"><i class="fa-regular fa-clock text-slate-400 w-3"></i> ${esc(item.reqTime)}</div>`
+                                    : ""
+                                }
+                                ${item.azi !== null && item.azi !== undefined
+                                    ? `<div class="flex items-center gap-1.5"><i class="fa-regular fa-compass text-slate-400 w-3"></i> 方位: <span class="text-accent font-bold">${item.azi}°</span></div>`
+                                    : ""
+                                }
+                                ${item.addrLat !== null && item.addrLng !== null && item.addrLat !== undefined
+                                    ? `<div class="text-orange-600 flex items-center gap-1.5 truncate"><i class="fa-solid fa-house text-orange-400 w-3 shrink-0"></i> 關聯: <span class="font-medium truncate">${esc(item.addrName || "自訂點")}</span></div>`
+                                    : ""
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    `;
+
+                    // 點擊項目本體：單一載入並切換至表單檢視
+                    li.onclick = () => {
+                        data = {
+                            lat: item.lat,
+                            lng: item.lng,
+                            azi: item.azi,
+                            phone: item.phone,
+                            reqTime: item.reqTime,
+                            regTime: item.regTime,
+                            addrLat: item.addrLat !== undefined ? item.addrLat : null,
+                            addrLng: item.addrLng !== undefined ? item.addrLng : null,
+                            addrName: item.addrName !== undefined ? item.addrName : "",
+                            searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
+                            towers: Array.isArray(item.towers) && item.towers.length > 0 ? item.towers.map(tower => ({ ...tower })) : [{
+                                lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime
+                            }],
+                        };
+                        currentHistoryId = item.id;
+                        selectedHistoryIds.clear();
+                        selectedHistoryIds.add(item.id);
+                        syncUI();
+                        const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
+                        updateMap(false, focusType);
+                        if (data.addrLat !== null && data.addrLng !== null) {
+                            switchTab('compare');
+                        } else {
+                            switchTab('base');
+                        }
+                    };
+                    ul.appendChild(li);
+                });
             }
 
             function copy() {
@@ -1704,6 +2076,7 @@
                 init,
                 parse,
                 updateMap,
+                updateFromInput,
                 openMap,
                 copy,
                 share,
@@ -1717,6 +2090,9 @@
                 switchTab,
                 toggleConsole,
                 locateMe,
+                toggleHistorySelect,
+                selectAllHistory,
+                clearHistorySelection,
             };
         })();
 
