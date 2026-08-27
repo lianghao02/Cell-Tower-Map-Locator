@@ -275,7 +275,7 @@
                     <div class="flex justify-between items-center pb-3 border-b border-slate-200/60">
                         <div class="flex items-center gap-2">
                             <i class="fa-solid fa-user-shield text-accent text-lg animate-pulse"></i>
-                            <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.1.4</span></h1>
+                            <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.2.0</span></h1>
                         </div>
                         <div class="flex items-center gap-1">
                             <!-- 手機端快速收合按鈕 -->
@@ -530,7 +530,26 @@
                             </button>
                         </div>
 
-                        <ul id="list" class="m-0 p-0 list-none max-h-[240px] overflow-y-auto pr-1 space-y-2"></ul>
+                        <!-- 空間交集分析卡片 (當勾選 >= 2 筆時顯示) -->
+                        <div id="historyIntersectionCard" class="hidden bg-gradient-to-br from-red-50 to-orange-50 border border-red-200/80 rounded-xl p-2.5 space-y-2 shadow-xs text-xs">
+                            <div class="flex justify-between items-center">
+                                <div class="font-bold text-red-700 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-bullseye text-red-600 animate-pulse"></i> 扇形交集空間分析
+                                </div>
+                                <span id="intersectionStatusBadge" class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-600 text-white shadow-2xs font-mono">交集命中</span>
+                            </div>
+                            <div id="intersectionInfoText" class="text-[11px] text-slate-600 leading-tight"></div>
+                            <div class="flex gap-1.5 pt-1 border-t border-red-200/60">
+                                <button id="btnFocusIntersection" class="btn flex-1 bg-red-600 hover:bg-red-700 text-white py-1 px-2 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs cursor-pointer border-none" onclick="app.focusIntersection()">
+                                    <i class="fa-solid fa-crosshairs"></i> 聚焦熱區
+                                </button>
+                                <button id="btnToggleIntersectionOnly" class="btn flex-1 bg-white hover:bg-orange-50 text-orange-700 border border-orange-300 py-1 px-2 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 shadow-2xs cursor-pointer" onclick="app.toggleShowIntersectionOnly()">
+                                    <i class="fa-solid fa-eye-slash" id="iconIntersectionOnly"></i> <span id="textIntersectionOnly">僅看交集</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <ul id="list" class="m-0 p-0 list-none max-h-[220px] overflow-y-auto pr-1 space-y-2"></ul>
                     </div>
                 </div>
                 </div><!-- end sheet-expandable-content -->

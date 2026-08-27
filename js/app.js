@@ -15,6 +15,8 @@
             let isMapSelectActive = false; // 地圖選點模式狀態
             let currentHistoryId = null; // 當前歷史紀錄 ID 追蹤
             let selectedHistoryIds = new Set(); // 多選歷史紀錄 ID 集合 (用於多筆疊加比對)
+            let isIntersectionOnly = false; // 是否僅高亮顯示扇形交集區
+            let lastIntersectionData = null; // 最新計算出的交集資訊 { polygon, area, centroid, towerCount }
             let myLocationMarker = null, myLocationCircle = null, myLocationLine = null; // GPS 自身定位圖層
             let myCoords = null; // { lat, lng, accuracy }
 
@@ -1319,7 +1321,123 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 return t;
             }
 
-            // 繪製多筆歷史紀錄疊加比對圖層
+            // --- 幾何計算模組：Sutherland-Hodgman 凸多邊形交集與面積計算 ---
+
+            // 將多邊形點序列規範化為逆時針 (Counter-Clockwise, CCW)
+            function ensureCCW(points) {
+                if (!points || points.length < 3) return points;
+                let signedArea = 0;
+                const n = points.length;
+                for (let i = 0; i < n; i++) {
+                    const j = (i + 1) % n;
+                    signedArea += (points[j][1] - points[i][1]) * (points[j][0] + points[i][0]);
+                }
+                if (signedArea > 0) {
+                    return [...points].reverse();
+                }
+                return points;
+            }
+
+            // 判斷點 P 是否在有向線段 cp1 -> cp2 的左側 (內部)
+            function isInsideEdge(cp1, cp2, p) {
+                const cross = (cp2[1] - cp1[1]) * (p[0] - cp1[0]) - (cp2[0] - cp1[0]) * (p[1] - cp1[1]);
+                return cross >= -1e-10;
+            }
+
+            // 計算兩直線交點
+            function computeLineIntersection(s, e, cp1, cp2) {
+                const dc = [cp1[0] - cp2[0], cp1[1] - cp2[1]];
+                const dp = [s[0] - e[0], s[1] - e[1]];
+                const n1 = cp1[0] * cp2[1] - cp1[1] * cp2[0];
+                const n2 = s[0] * e[1] - s[1] * e[0];
+                const denom = dc[0] * dp[1] - dc[1] * dp[0];
+                if (Math.abs(denom) < 1e-12) return s;
+                const n3 = 1.0 / denom;
+                return [
+                    (n1 * dp[0] - n2 * dc[0]) * n3,
+                    (n1 * dp[1] - n2 * dc[1]) * n3
+                ];
+            }
+
+            // Sutherland-Hodgman 凸多邊形剪裁求交集
+            function clipPolygon(subjectPoly, clipPoly) {
+                let outputList = [...subjectPoly];
+                const clipPoints = ensureCCW(clipPoly);
+
+                for (let i = 0; i < clipPoints.length; i++) {
+                    const cp1 = clipPoints[i];
+                    const cp2 = clipPoints[(i + 1) % clipPoints.length];
+                    const inputList = [...outputList];
+                    outputList = [];
+
+                    if (inputList.length === 0) break;
+
+                    let s = inputList[inputList.length - 1];
+                    for (let j = 0; j < inputList.length; j++) {
+                        const p = inputList[j];
+                        if (isInsideEdge(cp1, cp2, p)) {
+                            if (!isInsideEdge(cp1, cp2, s)) {
+                                outputList.push(computeLineIntersection(s, p, cp1, cp2));
+                            }
+                            outputList.push(p);
+                        } else if (isInsideEdge(cp1, cp2, s)) {
+                            outputList.push(computeLineIntersection(s, p, cp1, cp2));
+                        }
+                        s = p;
+                    }
+                }
+                return outputList;
+            }
+
+            // 求多個凸多邊形的共同交集
+            function intersectMultipleConvexPolygons(polygonList) {
+                if (!polygonList || polygonList.length === 0) return null;
+                if (polygonList.length === 1) return polygonList[0];
+
+                let current = ensureCCW(polygonList[0]);
+                for (let i = 1; i < polygonList.length; i++) {
+                    current = clipPolygon(current, polygonList[i]);
+                    if (!current || current.length < 3) return null;
+                }
+                return current;
+            }
+
+            // 計算多邊形面積 (平方公尺, Shoelace 結合投影比例)
+            function computePolygonAreaM2(points) {
+                if (!points || points.length < 3) return 0;
+                const n = points.length;
+                let sumLat = 0;
+                points.forEach(p => sumLat += p[0]);
+                const avgLat = sumLat / n;
+                const phi = avgLat * Math.PI / 180;
+                const mPerDegLat = 111320;
+                const mPerDegLng = 111320 * Math.cos(phi);
+
+                let area = 0;
+                for (let i = 0; i < n; i++) {
+                    const j = (i + 1) % n;
+                    const x1 = points[i][1] * mPerDegLng;
+                    const y1 = points[i][0] * mPerDegLat;
+                    const x2 = points[j][1] * mPerDegLng;
+                    const y2 = points[j][0] * mPerDegLat;
+                    area += (x1 * y2 - x2 * y1);
+                }
+                return Math.abs(area) / 2.0;
+            }
+
+            // 計算多邊形幾何中心 (重心)
+            function computePolygonCentroid(points) {
+                if (!points || points.length < 3) return null;
+                const n = points.length;
+                let sumLat = 0, sumLng = 0;
+                points.forEach(p => {
+                    sumLat += p[0];
+                    sumLng += p[1];
+                });
+                return [sumLat / n, sumLng / n];
+            }
+
+            // 繪製多筆歷史紀錄疊加比對圖層 (含扇形交集空間分析)
             function renderMultiHistoryComparison() {
                 if (addrMarker) { map.removeLayer(addrMarker); addrMarker = null; }
                 if (relationLine) { map.removeLayer(relationLine); relationLine = null; }
@@ -1328,6 +1446,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
 
                 const selectedItems = history.filter(h => selectedHistoryIds.has(h.id));
                 const allCoords = [];
+                const sectorPolygonsList = []; // 收集各扇形頂點以供交集計算
 
                 selectedItems.forEach((item, itemIdx) => {
                     const colorObj = COMPARE_COLORS[itemIdx % COMPARE_COLORS.length];
@@ -1410,14 +1529,22 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                                 const dLng = (r / (111320 * Math.cos(t.lat * (Math.PI / 180)))) * Math.sin(angle);
                                 points.push([t.lat + dLat, t.lng + dLng]);
                             }
+                            // points: 圓心 + 21個圓弧點 (閉合凸多邊形頂點序列)
+                            sectorPolygonsList.push({
+                                numLabel,
+                                colorObj,
+                                polygon: points.slice()
+                            });
+
                             points.push([t.lat, t.lng]);
 
+                            const isDimmed = isIntersectionOnly && lastIntersectionData && lastIntersectionData.polygon;
                             const secPoly = L.polygon(points, {
-                                color: colorObj.border,
-                                fillColor: colorObj.fill,
-                                fillOpacity: 0.18,
-                                weight: 2,
-                                opacity: 0.75
+                                color: isDimmed ? "#94a3b8" : colorObj.border,
+                                fillColor: isDimmed ? "#cbd5e1" : colorObj.fill,
+                                fillOpacity: isDimmed ? 0.04 : 0.18,
+                                weight: isDimmed ? 1 : 2,
+                                opacity: isDimmed ? 0.25 : 0.75
                             }).addTo(map);
 
                             secPoly.bindTooltip(`[#${numLabel} ${colorObj.name}] 方位: ${t.azi}°`, { permanent: false, direction: "center" });
@@ -1426,10 +1553,139 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     });
                 });
 
+                // --- 空間交集熱區求解 ---
+                lastIntersectionData = null;
+                if (sectorPolygonsList.length >= 2) {
+                    const rawPolys = sectorPolygonsList.map(s => s.polygon);
+                    const intersectionPoints = intersectMultipleConvexPolygons(rawPolys);
+
+                    if (intersectionPoints && intersectionPoints.length >= 3) {
+                        const areaM2 = computePolygonAreaM2(intersectionPoints);
+                        const centroid = computePolygonCentroid(intersectionPoints);
+                        lastIntersectionData = {
+                            polygon: intersectionPoints,
+                            area: areaM2,
+                            centroid: centroid,
+                            towerCount: sectorPolygonsList.length
+                        };
+
+                        // 繪製高亮交集熱區 (警戒亮紅網底 + 粗虛線邊框)
+                        const intersectPoly = L.polygon(intersectionPoints, {
+                            color: "#dc2626",
+                            fillColor: "#ef4444",
+                            fillOpacity: 0.48,
+                            weight: 3.5,
+                            dashArray: "6, 4",
+                            opacity: 0.95
+                        }).addTo(map);
+
+                        const areaText = areaM2 >= 10000
+                            ? `${(areaM2 / 10000).toFixed(2)} 公頃`
+                            : `${Math.round(areaM2)} 平方公尺`;
+
+                        intersectPoly.bindTooltip(`<div class="font-bold text-xs text-red-700">🎯 訊號交集重疊熱區<br>面積: ${areaText}</div>`, { permanent: false, direction: "center" });
+                        multiTowerLayers.push(intersectPoly);
+
+                        // 繪製熱區核心中心 Marker
+                        if (centroid) {
+                            allCoords.push(centroid);
+                            const centroidIcon = L.divIcon({
+                                html: '<div class="w-6 h-6 rounded-full bg-red-600 border-2 border-white text-white flex items-center justify-center font-bold text-xs shadow-xl">🎯</div>',
+                                className: 'custom-centroid-icon',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 12]
+                            });
+                            const cMarker = L.marker(centroid, { icon: centroidIcon }).addTo(map);
+                            cMarker.bindPopup(`
+                                <div class="space-y-1 text-xs">
+                                    <div class="font-bold text-red-600 flex items-center gap-1">
+                                        <i class="fa-solid fa-crosshairs"></i> 基地台訊號交集核心熱點
+                                    </div>
+                                    <div class="font-mono text-slate-700">${centroid[0].toFixed(6)}, ${centroid[1].toFixed(6)}</div>
+                                    <div class="text-[11px] text-slate-600">📏 覆蓋面積: <b>${areaText}</b></div>
+                                    <div class="text-[10px] text-slate-400">共 ${sectorPolygonsList.length} 組基地台發射扇形交會重疊</div>
+                                </div>
+                            `);
+                            multiTowerLayers.push(cMarker);
+                        }
+                    }
+                }
+
+                updateIntersectionUI();
+
                 if (allCoords.length > 0) {
                     const bounds = L.latLngBounds(allCoords);
                     map.fitBounds(bounds, getFitBoundsOptions());
                 }
+            }
+
+            // 更新交集分析 UI 卡片
+            function updateIntersectionUI() {
+                const card = document.getElementById("historyIntersectionCard");
+                const badge = document.getElementById("intersectionStatusBadge");
+                const text = document.getElementById("intersectionInfoText");
+                const btnFocus = document.getElementById("btnFocusIntersection");
+                const btnToggle = document.getElementById("btnToggleIntersectionOnly");
+                const textToggle = document.getElementById("textIntersectionOnly");
+                const iconToggle = document.getElementById("iconIntersectionOnly");
+
+                if (!card) return;
+
+                if (selectedHistoryIds.size < 2) {
+                    card.classList.add("hidden");
+                    return;
+                }
+
+                card.classList.remove("hidden");
+
+                if (lastIntersectionData && lastIntersectionData.polygon) {
+                    const areaM2 = lastIntersectionData.area;
+                    const areaText = areaM2 >= 10000
+                        ? `${(areaM2 / 10000).toFixed(2)} 公頃`
+                        : `${Math.round(areaM2)} 平方公尺`;
+
+                    badge.className = "text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-600 text-white shadow-2xs font-mono";
+                    badge.innerText = "發現熱區";
+
+                    text.innerHTML = `🎯 偵測到 <b>${lastIntersectionData.towerCount}</b> 處扇形重疊，預估熱區面積 <b>${areaText}</b><br><span class="text-[10px] text-slate-400 font-mono">中心: ${lastIntersectionData.centroid[0].toFixed(5)}, ${lastIntersectionData.centroid[1].toFixed(5)}</span>`;
+
+                    if (btnFocus) btnFocus.disabled = false;
+                    if (btnToggle) btnToggle.disabled = false;
+                } else {
+                    badge.className = "text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-400 text-white shadow-2xs font-mono";
+                    badge.innerText = "無交集";
+
+                    text.innerHTML = `⚠️ 所選取之 <b>${selectedHistoryIds.size}</b> 筆歷史扇形未形成共同重疊交集區。`;
+
+                    if (btnFocus) btnFocus.disabled = true;
+                    if (btnToggle) btnToggle.disabled = true;
+                }
+
+                if (textToggle && iconToggle) {
+                    if (isIntersectionOnly) {
+                        textToggle.innerText = "顯示全部";
+                        iconToggle.className = "fa-solid fa-eye";
+                    } else {
+                        textToggle.innerText = "僅看交集";
+                        iconToggle.className = "fa-solid fa-eye-slash";
+                    }
+                }
+            }
+
+            // 聚焦對焦至扇形交集熱區
+            function focusIntersection() {
+                if (!lastIntersectionData || !lastIntersectionData.polygon || !map) return;
+                const bounds = L.latLngBounds(lastIntersectionData.polygon);
+                map.fitBounds(bounds, { padding: [80, 80], maxZoom: 18 });
+                if (isMobileLayout()) {
+                    toggleConsole(true);
+                }
+            }
+
+            // 切換是否僅高亮交集熱區
+            function toggleShowIntersectionOnly() {
+                isIntersectionOnly = !isIntersectionOnly;
+                updateMap(false);
             }
 
             // 切換單一歷史項目的勾選狀態 (多選比對不跳轉分頁)
@@ -1565,10 +1821,14 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                                 <div class="flex items-center gap-1.5 overflow-hidden">
                                     ${isSelected && colorInfo ? `<span style="background-color: ${colorInfo.color.badge}" class="text-white text-[10px] font-bold px-1.5 py-0.2 rounded font-mono shadow-xs">#${colorInfo.idx} ${colorInfo.color.name}</span>` : ""}
                                     <span class="text-[0.7rem] font-medium text-slate-400 truncate">${esc(item.time)}</span>
+                                <div class="flex items-center gap-1">
+                                    <button class="text-slate-400 hover:text-accent p-0.5 border-none bg-transparent cursor-pointer transition-colors" onclick="app.loadToForm(${item.id}, event)" title="載入至表單進行編輯">
+                                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                                    </button>
+                                    <button class="text-slate-300 hover:text-del p-0.5 border-none bg-transparent cursor-pointer transition-colors" onclick="app.deleteItem(${item.id}, event)" title="刪除紀錄">
+                                        <i class="fa-solid fa-xmark text-xs"></i>
+                                    </button>
                                 </div>
-                                <button class="text-slate-300 hover:text-del p-0.5 border-none bg-transparent cursor-pointer transition-colors" onclick="app.deleteItem(${item.id}, event)" title="刪除紀錄">
-                                    <i class="fa-solid fa-xmark text-xs"></i>
-                                </button>
                             </div>
 
                             <div class="flex items-center gap-2 mb-1">
@@ -1597,37 +1857,46 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     </div>
                     `;
 
-                    // 點擊項目本體：單一載入並切換至表單檢視
-                    li.onclick = () => {
-                        data = {
-                            lat: item.lat,
-                            lng: item.lng,
-                            azi: item.azi,
-                            phone: item.phone,
-                            reqTime: item.reqTime,
-                            regTime: item.regTime,
-                            addrLat: item.addrLat !== undefined ? item.addrLat : null,
-                            addrLng: item.addrLng !== undefined ? item.addrLng : null,
-                            addrName: item.addrName !== undefined ? item.addrName : "",
-                            searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
-                            towers: Array.isArray(item.towers) && item.towers.length > 0 ? item.towers.map(tower => ({ ...tower })) : [{
-                                lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime
-                            }],
-                        };
-                        currentHistoryId = item.id;
-                        selectedHistoryIds.clear();
-                        selectedHistoryIds.add(item.id);
-                        syncUI();
-                        const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
-                        updateMap(false, focusType);
-                        if (data.addrLat !== null && data.addrLng !== null) {
-                            switchTab('compare');
-                        } else {
-                            switchTab('base');
-                        }
+                    // 點擊項目本體：切換選取狀態並更新地圖（完全不跳轉分頁）
+                    li.onclick = (e) => {
+                        toggleHistorySelect(item.id, e);
                     };
                     ul.appendChild(li);
                 });
+            }
+
+            // 主動載入特定歷史紀錄至定位/關聯表單並切換分頁
+            function loadToForm(id, e) {
+                if (e) e.stopPropagation();
+                const item = history.find(h => h.id === id);
+                if (!item) return;
+
+                data = {
+                    lat: item.lat,
+                    lng: item.lng,
+                    azi: item.azi,
+                    phone: item.phone,
+                    reqTime: item.reqTime,
+                    regTime: item.regTime,
+                    addrLat: item.addrLat !== undefined ? item.addrLat : null,
+                    addrLng: item.addrLng !== undefined ? item.addrLng : null,
+                    addrName: item.addrName !== undefined ? item.addrName : "",
+                    searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
+                    towers: Array.isArray(item.towers) && item.towers.length > 0 ? item.towers.map(tower => ({ ...tower })) : [{
+                        lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime
+                    }],
+                };
+                currentHistoryId = item.id;
+                selectedHistoryIds.clear();
+                selectedHistoryIds.add(item.id);
+                syncUI();
+                const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
+                updateMap(false, focusType);
+                if (data.addrLat !== null && data.addrLng !== null) {
+                    switchTab('compare');
+                } else {
+                    switchTab('base');
+                }
             }
 
             function copy() {
@@ -2003,6 +2272,13 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 toggleHistorySelect,
                 selectAllHistory,
                 clearHistorySelection,
+                loadToForm,
+                focusIntersection,
+                toggleShowIntersectionOnly,
+                clipPolygon,
+                intersectMultipleConvexPolygons,
+                computePolygonAreaM2,
+                computePolygonCentroid,
             };
         })();
 
