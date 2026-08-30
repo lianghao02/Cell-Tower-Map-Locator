@@ -254,12 +254,12 @@
             <div id="console-card" class="bg-white/85 backdrop-blur-xl border border-white/60 rounded-2xl shadow-2xl p-4 flex flex-col overflow-hidden max-h-[calc(100vh-80px)]">
                 
                 <!-- 手機端頂部拉把 (Handle Bar) -->
-                <div class="sheet-handle-bar justify-center items-center py-1 -mt-1 mb-1 cursor-pointer select-none" onclick="app.toggleConsole()">
+                <button id="btnSheetHandle" type="button" class="sheet-handle-bar justify-center items-center py-1 -mt-1 mb-1 cursor-pointer select-none w-full border-none bg-transparent" onclick="app.toggleConsole()" aria-controls="console-card" aria-expanded="true" aria-label="收合或展開查詢控制台">
                     <div class="w-10 h-1.5 bg-slate-300/80 rounded-full hover:bg-slate-400 transition-colors"></div>
-                </div>
+                </button>
 
                 <!-- 手機端收合狀態摘要列 (點擊一鍵展開) -->
-                <div class="sheet-collapsed-summary items-center justify-between py-1 cursor-pointer" onclick="app.toggleConsole(false)">
+                <button id="btnSheetSummary" type="button" class="sheet-collapsed-summary items-center justify-between py-1 cursor-pointer w-full border-none bg-transparent text-left" onclick="app.toggleConsole(false)" aria-controls="console-card" aria-expanded="false" aria-label="展開查詢控制台">
                     <div class="flex items-center gap-2 overflow-hidden">
                         <i class="fa-solid fa-tower-cell text-accent text-sm"></i>
                         <span id="sheetSummaryText" class="text-xs font-bold text-slate-700 truncate">點擊展開查詢控制台</span>
@@ -267,7 +267,7 @@
                     <div class="flex items-center gap-1.5 shrink-0">
                         <span class="text-[11px] text-accent font-semibold px-2 py-0.5 bg-accent/10 rounded-full">展開 <i class="fa-solid fa-chevron-up text-[10px]"></i></span>
                     </div>
-                </div>
+                </button>
 
                 <!-- 可展開之主要表單內容 -->
                 <div class="sheet-expandable-content flex flex-col flex-1 overflow-hidden space-y-3">
@@ -289,7 +289,7 @@
                     </div>
 
                 <!-- Tabs 標籤選單 -->
-                <div class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
+                <div id="tabMenu" class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
                     <button onclick="app.switchTab('parse')" id="tab-btn-parse" class="tab-btn active flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
                         <i class="fa-solid fa-bolt text-sm"></i><span>智慧解析</span>
                     </button>
@@ -504,7 +504,7 @@
                     <!-- Tab 4: 最近歷史 -->
                     <div id="tab-content-history" class="tab-content hidden space-y-2">
                         <!-- 多選比對工具列 -->
-                        <div class="flex justify-between items-center bg-slate-100/90 p-2 rounded-xl border border-slate-200/70 text-[11px]">
+                        <div class="history-toolbar flex justify-between items-center gap-2 bg-slate-100/90 p-2 rounded-xl border border-slate-200/70 text-[11px]">
                             <div class="flex items-center gap-1.5 font-bold text-slate-700">
                                 <i class="fa-solid fa-layer-group text-accent"></i>
                                 <span>多筆比對: <span id="historyCompareCount" class="text-accent font-mono font-bold">0</span> 筆</span>
@@ -569,7 +569,7 @@
             </button>
             
             <!-- 2. 手機版控制台喚起 FAB -->
-            <button id="btnOpenSheetFab" class="md:hidden w-12 h-12 bg-accent hover:bg-blue-600 text-white rounded-full shadow-xl border border-white/60 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95" onclick="app.toggleConsole(false)" title="展開查詢控制台">
+        <button id="btnOpenSheetFab" class="md:hidden w-12 h-12 bg-accent hover:bg-blue-600 text-white rounded-full shadow-xl border border-white/60 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95" onclick="app.toggleConsole(false)" title="展開查詢控制台" aria-controls="console-card" aria-expanded="false" aria-label="展開查詢控制台">
                 <i class="fa-solid fa-magnifying-glass-location text-base"></i>
             </button>
         </div>

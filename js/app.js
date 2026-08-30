@@ -282,13 +282,22 @@
                 return results;
             }
 
+            // 將網頁表格複製出的 <br> 與不換行空白轉為一般文字格式
+            function normalizeInputText(text) {
+                return String(text || "")
+                    .replace(/\r\n?/g, "\n")
+                    .replace(/<br\s*\/?>/gi, "\n")
+                    .replace(/\u00a0/g, " ");
+            }
+
             // 判斷是否為通訊調閱入口網站的完整定位回覆，避免一般座標文字誤入專用解析流程
             function isPortalResponse(text) {
+                const portalRecordPattern = /^\s*\|?\s*\d+\s*\|?\s*即時定位\s*\|?\s*(?:定位完成|無法定位)(?=\s|\|)/m;
                 const hasCompleteResponse = /回覆資訊[：:]/.test(text) &&
                     /定位記錄[：:]/.test(text) &&
                     /序號\s+定位類別\s+定位狀態/.test(text) &&
-                    /^\s*\d+\s+即時定位\s+(?:定位完成|無法定位)/m.test(text);
-                const hasPortalRecords = /^\s*\d+\s+即時定位\s+(?:定位完成|無法定位)/m.test(text);
+                    portalRecordPattern.test(text);
+                const hasPortalRecords = portalRecordPattern.test(text);
                 const hasSingleRecordFragment =
                     /(?:即時定位\s+)?(?:定位完成|無法定位)/.test(text) &&
                     /基地[臺台]經緯度/.test(text) &&
@@ -346,7 +355,7 @@
             // 解析入口網站回覆；輸出沿用既有 towers 結構，降低對地圖與歷史功能的影響
             function parsePortalResponse(text, fallbackPhone) {
                 let recordStarts = [...text.matchAll(
-                    /^\s*(\d+)\s+即時定位\s+(定位完成|無法定位)(?=\s)/gm
+                    /^\s*\|?\s*(\d+)\s*\|?\s*即時定位\s*\|?\s*(定位完成|無法定位)(?=\s|\|)/gm
                 )];
                 if (recordStarts.length === 0) {
                     const statusMatch = text.match(/(?:即時定位\s+)?(定位完成|無法定位)/);
@@ -413,7 +422,7 @@
 
             // 核心解析邏輯 (支援多筆段落切割 Block Splitting、全格式 DMS/DMM 座標與 5 筆上限截取)
             function parse() {
-                const text = document.getElementById("rawInput").value;
+                const text = normalizeInputText(document.getElementById("rawInput").value);
                 if (!text) return alert("請先貼上內容！");
 
                 // 1. 全局抓取門號 (作為預設 fallback)
@@ -1817,10 +1826,11 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
 
                         <!-- 內容本體 -->
                         <div class="flex-1 min-w-0">
-                            <div class="flex items-center justify-between gap-1 mb-1">
+                            <div class="history-meta-row flex items-center justify-between gap-1 mb-1">
                                 <div class="flex items-center gap-1.5 overflow-hidden">
                                     ${isSelected && colorInfo ? `<span style="background-color: ${colorInfo.color.badge}" class="text-white text-[10px] font-bold px-1.5 py-0.2 rounded font-mono shadow-xs">#${colorInfo.idx} ${colorInfo.color.name}</span>` : ""}
-                                    <span class="text-[0.7rem] font-medium text-slate-400 truncate">${esc(item.time)}</span>
+                                    <span class="history-time text-[0.7rem] font-medium text-slate-400 truncate">${esc(item.time)}</span>
+                                </div>
                                 <div class="flex items-center gap-1">
                                     <button class="text-slate-400 hover:text-accent p-0.5 border-none bg-transparent cursor-pointer transition-colors" onclick="app.loadToForm(${item.id}, event)" title="載入至表單進行編輯">
                                         <i class="fa-solid fa-pen-to-square text-xs"></i>
@@ -1831,10 +1841,10 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-2 mb-1">
-                                <span class="font-bold text-primary text-[0.95rem] tracking-tight font-mono">${item.lat}, ${item.lng}</span>
+                            <div class="history-primary-row flex items-center gap-2 mb-1">
+                                <span class="history-coordinate font-bold text-primary text-[0.95rem] tracking-tight font-mono">${item.lat}, ${item.lng}</span>
                                 ${item.phone
-                                    ? `<span class="tag text-[0.7rem] font-medium py-0.5 px-1.5 rounded bg-accent/10 text-accent border border-accent/20 font-mono">${esc(item.phone)}</span>`
+                                    ? `<span class="history-phone tag text-[0.7rem] font-medium py-0.5 px-1.5 rounded bg-accent/10 text-accent border border-accent/20 font-mono">${esc(item.phone)}</span>`
                                     : ""
                                 }
                             </div>
@@ -2083,7 +2093,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 if (data.towers && data.towers.length > 0) {
                     const count = data.towers.length;
                     const ph = data.phone ? `📱 ${data.phone}` : `📍 ${data.lat}, ${data.lng}`;
-                    summaryTextEl.innerText = `${ph} (共 ${count} 筆軌跡)`;
+                    summaryTextEl.innerText = `${ph}（目前顯示 ${count} 筆）`;
                 } else if (data.lat !== null && data.lng !== null) {
                     const ph = data.phone ? `📱 ${data.phone}` : `📍 ${data.lat}, ${data.lng}`;
                     summaryTextEl.innerText = ph;
@@ -2099,6 +2109,10 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 if (!el || !arrow) return;
 
                 const isCollapsed = el.classList.contains("collapsed") || el.classList.contains("is-sheet-collapsed");
+                ["btnSheetHandle", "btnSheetSummary", "btnOpenSheetFab"].forEach((id) => {
+                    const button = document.getElementById(id);
+                    if (button) button.setAttribute("aria-expanded", String(!isCollapsed));
+                });
                 arrow.classList.remove("fa-chevron-left", "fa-chevron-right", "fa-chevron-up", "fa-chevron-down");
                 if (isMobileLayout()) {
                     arrow.classList.add(isCollapsed ? "fa-chevron-up" : "fa-chevron-down");
