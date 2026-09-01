@@ -1,6 +1,6 @@
-# 📡 手機門號基地台即時定位工具 (v3.2.0)
+# 📡 手機門號基地台即時定位工具 (v3.2.1)
 
-[![Version](https://img.shields.io/badge/version-v3.2.0-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.2.1-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-線上即開即用-emerald.svg)](https://lianghao02.github.io/Cell-Tower-Map-Locator/)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Mobile%20%7C%20Desktop-orange.svg)](#)
@@ -36,7 +36,7 @@
 
 ---
 
-## 🏆 v3.2.0 重點特色與核心功能
+## 🏆 v3.2.1 重點特色與核心功能
 
 ### 1. 🎯 扇形交集空間分析引擎 (Sector Intersection Spatial Analysis)
 - **多邊形自動交集**：在「最近歷史」勾選 2 筆以上紀錄，系統以 Sutherland-Hodgman 剪裁演算法自動求解所有扇形的幾何重疊區域。
@@ -85,4 +85,4 @@ powershell -ExecutionPolicy Bypass -File scripts\qa.ps1
 
 ## 📄 版權聲明 (License)
 
-System Version 3.2.0 &copy; 2026 Cell Phone Locator. All rights reserved.
+System Version 3.2.1 &copy; 2026 Cell Phone Locator. All rights reserved.
