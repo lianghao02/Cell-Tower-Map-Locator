@@ -1,6 +1,7 @@
 # 📝 更新日誌 (CHANGELOG)
 
 ## 🏆 v3.2.0 (2026-08-27)
+- **版本標示校正**：README 頁尾與 Windows 啟動器統一標示為 v3.2.0。
 - **🎯 扇形交集空間分析引擎 (Sector Intersection Spatial Analysis)**：
   - 內建自研 Sutherland-Hodgman 凸多邊形幾何剪裁演算法，零額外 CDN 依賴，100% 離線可用。
   - 當勾選 2 筆以上歷史紀錄時，自動求解多個基地台發射扇形之共同交集重疊區域。
