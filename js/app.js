@@ -17,6 +17,7 @@
             let selectedHistoryIds = new Set(); // 多選歷史紀錄 ID 集合 (用於多筆疊加比對)
             let isIntersectionOnly = false; // 是否僅高亮顯示扇形交集區
             let lastIntersectionData = null; // 最新計算出的交集資訊 { polygon, area, centroid, towerCount }
+            let lastIntersectionStatus = "idle"; // idle | insufficient-sectors | no-intersection | intersection
             let myLocationMarker = null, myLocationCircle = null, myLocationLine = null; // GPS 自身定位圖層
             let myCoords = null; // { lat, lng, accuracy }
 
@@ -53,6 +54,11 @@
                 return String(str)
                     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+
+            function isValidAzimuth(value) {
+                const azimuth = Number(value);
+                return Number.isFinite(azimuth) && azimuth >= 0 && azimuth <= 360;
             }
 
             // --- 參數解耦配置 (Config) ---
@@ -176,26 +182,18 @@
                     data.lng = parseFloat(params.get('lng'));
                     hasData = true;
                 }
-                if (params.has('azi')) data.azi = parseFloat(params.get('azi'));
-                if (params.has('phone')) data.phone = params.get('phone');
-                if (params.has('reqTime')) data.reqTime = params.get('reqTime');
-                if (params.has('regTime')) data.regTime = params.get('regTime');
-
-                // 解析目標地址關聯參數
-                if (params.has('addrLat') && params.has('addrLng')) {
-                    data.addrLat = parseFloat(params.get('addrLat'));
-                    data.addrLng = parseFloat(params.get('addrLng'));
-                } else {
-                    data.addrLat = null;
-                    data.addrLng = null;
-                }
-                if (params.has('addrName')) data.addrName = params.get('addrName');
-                else data.addrName = "";
+                // 分享連結只還原非敏感基地台座標；門號、時間、地址與方位角一律不從 URL 讀取。
+                data.azi = null;
+                data.phone = "";
+                data.reqTime = "";
+                data.regTime = "";
+                data.addrLat = null;
+                data.addrLng = null;
+                data.addrName = "";
 
                 if (hasData) {
                     syncUI();
-                    const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
-                    updateMap(false, focusType); // 不自動存入歷史，避免污染
+                    updateMap(false, "base"); // 不自動存入歷史，避免污染
                 }
             }
 
@@ -369,6 +367,9 @@
                 const records = [];
                 let completedCount = 0;
                 let failedCount = 0;
+                let missingTowerCount = 0;
+                let missingAzimuthCount = 0;
+                let invalidAzimuthCount = 0;
 
                 recordStarts.forEach((start, index) => {
                     const end = index + 1 < recordStarts.length ? recordStarts[index + 1].index : text.length;
@@ -394,12 +395,20 @@
                     );
 
                     // 無法定位或缺少有效基地臺座標的紀錄保留於統計，但不送入既有地圖繪製
-                    if (statusText !== "定位完成" || !tower) return;
+                    if (statusText !== "定位完成") return;
+                    if (!tower) {
+                        missingTowerCount += 1;
+                        return;
+                    }
+
+                    const rawAzimuth = azMatch ? parseFloat(azMatch[1]) : null;
+                    if (rawAzimuth === null) missingAzimuthCount += 1;
+                    else if (!isValidAzimuth(rawAzimuth)) invalidAzimuthCount += 1;
 
                     records.push({
                         lat: tower.lat,
                         lng: tower.lng,
-                        azi: azMatch ? parseFloat(azMatch[1]) : null,
+                        azi: isValidAzimuth(rawAzimuth) ? rawAzimuth : null,
                         phone: normalizePhone(phoneMatch ? phoneMatch[1] : globalPhone),
                         reqTime: reqMatch ? reqMatch[1].replace(/-/g, "/") : "",
                         regTime: regMatch ? regMatch[1].replace(/-/g, "/") : "",
@@ -416,7 +425,10 @@
                     declaredCount: declaredMatch ? parseInt(declaredMatch[1], 10) : recordStarts.length,
                     parsedCount: recordStarts.length,
                     completedCount,
-                    failedCount
+                    failedCount,
+                    missingTowerCount,
+                    missingAzimuthCount,
+                    invalidAzimuthCount
                 };
             }
 
@@ -575,7 +587,13 @@
                         const limitText = originalCount > config.maxBatchLimit
                             ? `，目前依既有上限載入最新 ${config.maxBatchLimit} 筆`
                             : "";
-                        batchNoticeText.innerText = `完整回覆共 ${portalResult.parsedCount} 筆：${portalResult.completedCount} 筆完成、${portalResult.failedCount} 筆無法定位；有效基地臺 ${originalCount} 筆${limitText}。`;
+                        const sectorReadyCount = parsedList.filter(t => isValidAzimuth(t.azi)).length;
+                        const qualityNotes = [];
+                        if (portalResult.missingTowerCount) qualityNotes.push(`${portalResult.missingTowerCount} 筆缺少有效基地台座標`);
+                        if (portalResult.missingAzimuthCount) qualityNotes.push(`${portalResult.missingAzimuthCount} 筆未提供方位角`);
+                        if (portalResult.invalidAzimuthCount) qualityNotes.push(`${portalResult.invalidAzimuthCount} 筆方位角無效`);
+                        const qualityText = qualityNotes.length ? `；待確認：${qualityNotes.join('、')}` : "";
+                        batchNoticeText.innerText = `完整回覆 ${portalResult.parsedCount} 筆：完成 ${portalResult.completedCount}、無法定位 ${portalResult.failedCount}；可繪製基地台 ${originalCount}、可分析扇區 ${sectorReadyCount}${qualityText}${limitText}。`;
                     }
                 } else if (originalCount > config.maxBatchLimit) {
                     finalTowers = parsedList.slice(-config.maxBatchLimit);
@@ -1280,16 +1298,12 @@
                 else alert("無座標");
             }
 
-            // 產生應用程式分享連結：使用 fragment 避免參數進入伺服器紀錄，並排除門號、時間與地址名稱
+            // 產生應用程式分享連結：僅保留基地台座標，避免傳遞案件關聯或個人資料。
             function getAppLink() {
                 const baseUrl = "https://lianghao02.github.io/Cell-Tower-Map-Locator/";
                 const params = new URLSearchParams();
                 if (data.lat !== null) params.append('lat', data.lat);
                 if (data.lng !== null) params.append('lng', data.lng);
-                if (data.azi !== null) params.append('azi', data.azi);
-                if (data.addrLat !== null) params.append('addrLat', data.addrLat);
-                if (data.addrLng !== null) params.append('addrLng', data.addrLng);
-
                 return baseUrl + "#" + params.toString();
             }
 
@@ -1541,6 +1555,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                             // points: 圓心 + 21個圓弧點 (閉合凸多邊形頂點序列)
                             sectorPolygonsList.push({
                                 numLabel,
+                                towerIndex: itemTowers.length > 1 ? tIdx + 1 : null,
                                 colorObj,
                                 polygon: points.slice()
                             });
@@ -1564,6 +1579,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
 
                 // --- 空間交集熱區求解 ---
                 lastIntersectionData = null;
+                lastIntersectionStatus = sectorPolygonsList.length < 2 ? "insufficient-sectors" : "no-intersection";
                 if (sectorPolygonsList.length >= 2) {
                     const rawPolys = sectorPolygonsList.map(s => s.polygon);
                     const intersectionPoints = intersectMultipleConvexPolygons(rawPolys);
@@ -1575,8 +1591,10 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                             polygon: intersectionPoints,
                             area: areaM2,
                             centroid: centroid,
-                            towerCount: sectorPolygonsList.length
+                            towerCount: sectorPolygonsList.length,
+                            sourceLabels: sectorPolygonsList.map(source => `#${source.numLabel}${source.towerIndex ? `-${source.towerIndex}` : ""}`)
                         };
+                        lastIntersectionStatus = "intersection";
 
                         // 繪製高亮交集熱區 (警戒亮紅網底 + 粗虛線邊框)
                         const intersectPoly = L.polygon(intersectionPoints, {
@@ -1592,10 +1610,10 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                             ? `${(areaM2 / 10000).toFixed(2)} 公頃`
                             : `${Math.round(areaM2)} 平方公尺`;
 
-                        intersectPoly.bindTooltip(`<div class="font-bold text-xs text-red-700">🎯 訊號交集重疊熱區<br>面積: ${areaText}</div>`, { permanent: false, direction: "center" });
+                        intersectPoly.bindTooltip(`<div class="font-bold text-xs text-red-700">🎯 訊號交集分析參考範圍<br>面積: ${areaText}<br><span class="text-[10px]">非手機實際位置</span></div>`, { permanent: false, direction: "center" });
                         multiTowerLayers.push(intersectPoly);
 
-                        // 繪製熱區核心中心 Marker
+                            // 幾何中心僅作為視覺參考，不代表手機位置。
                         if (centroid) {
                             allCoords.push(centroid);
                             const centroidIcon = L.divIcon({
@@ -1608,11 +1626,11 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                             cMarker.bindPopup(`
                                 <div class="space-y-1 text-xs">
                                     <div class="font-bold text-red-600 flex items-center gap-1">
-                                        <i class="fa-solid fa-crosshairs"></i> 基地台訊號交集核心熱點
+                                        <i class="fa-solid fa-crosshairs"></i> 訊號交集幾何中心參考點
                                     </div>
                                     <div class="font-mono text-slate-700">${centroid[0].toFixed(6)}, ${centroid[1].toFixed(6)}</div>
                                     <div class="text-[11px] text-slate-600">📏 覆蓋面積: <b>${areaText}</b></div>
-                                    <div class="text-[10px] text-slate-400">共 ${sectorPolygonsList.length} 組基地台發射扇形交會重疊</div>
+                                    <div class="text-[10px] text-slate-400">共 ${sectorPolygonsList.length} 個有效扇區幾何交會；非手機實際位置</div>
                                 </div>
                             `);
                             multiTowerLayers.push(cMarker);
@@ -1654,17 +1672,21 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                         : `${Math.round(areaM2)} 平方公尺`;
 
                     badge.className = "text-[10px] font-bold px-1.5 py-0.2 rounded bg-red-600 text-white shadow-2xs font-mono";
-                    badge.innerText = "發現熱區";
+                    badge.innerText = "形成參考範圍";
 
-                    text.innerHTML = `🎯 偵測到 <b>${lastIntersectionData.towerCount}</b> 處扇形重疊，預估熱區面積 <b>${areaText}</b><br><span class="text-[10px] text-slate-400 font-mono">中心: ${lastIntersectionData.centroid[0].toFixed(5)}, ${lastIntersectionData.centroid[1].toFixed(5)}</span>`;
+                    text.innerHTML = `使用 <b>${lastIntersectionData.towerCount}</b> 個有效扇區（${lastIntersectionData.sourceLabels.join('、')}），依基地台座標、方位角與目前扇區設定求交集。<br>結果：形成 1 個訊號交集分析參考範圍，面積約 <b>${areaText}</b>。<br><span class="text-[10px] text-slate-400 font-mono">幾何中心參考點: ${lastIntersectionData.centroid[0].toFixed(5)}, ${lastIntersectionData.centroid[1].toFixed(5)}</span>`;
 
                     if (btnFocus) btnFocus.disabled = false;
                     if (btnToggle) btnToggle.disabled = false;
                 } else {
                     badge.className = "text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-400 text-white shadow-2xs font-mono";
-                    badge.innerText = "無交集";
-
-                    text.innerHTML = `⚠️ 所選取之 <b>${selectedHistoryIds.size}</b> 筆歷史扇形未形成共同重疊交集區。`;
+                    if (lastIntersectionStatus === "insufficient-sectors") {
+                        badge.innerText = "資料不足";
+                        text.innerHTML = `目前僅有不足 <b>2</b> 個有效扇區可供交集計算；請確認來源資料是否含有效方位角。`;
+                    } else {
+                        badge.innerText = "未形成交集";
+                        text.innerHTML = `已完成 <b>${selectedHistoryIds.size}</b> 筆歷史資料的扇區分析，但未形成共同訊號交集分析參考範圍。此為分析結果，不是程式錯誤。`;
+                    }
 
                     if (btnFocus) btnFocus.disabled = true;
                     if (btnToggle) btnToggle.disabled = true;
