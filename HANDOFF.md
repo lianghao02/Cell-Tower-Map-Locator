@@ -1,7 +1,7 @@
 # HANDOFF
 
 ## 目前狀態
-待推送（已完成靜態檢核；本機 `file:///` 瀏覽器視覺實測受 Codex 瀏覽器政策限制）
+可交付（v3.2.2 已推送至 `origin/main`；靜態檢核通過）
 
 ---
 
@@ -90,9 +90,9 @@
 ---
 
 ## Git 狀態
-- Commit：待建立（v3.2.2 發布文件與行動版貼上修正）
-- Push：待本輪 Commit 後推送
-- Working Tree：Modified（待提交）
+- Commit：`65cf509`（v3.2.2 行動版貼上、圖磚相容與文件更新）
+- Push：是（`origin/main`）
+- Working Tree：Clean
 - Branch：`main`
 
 ---
@@ -109,7 +109,7 @@ D:\Development\GitHub\02_Cell-Tower-Map-Locator\
 ├── 啟動工具.bat         # 一鍵啟動
 ├── scripts/
 │   └── qa.ps1          # QA 腳本：node --check + git diff --check
-├── CHANGELOG.md        # 版本紀錄（最新 v3.2.1）
+├── CHANGELOG.md        # 版本紀錄（最新 v3.2.2）
 ├── README.md           # 專案說明
 └── AGENTS.md           # 專案專屬規則邊界
 ```
@@ -154,6 +154,6 @@ D:\Development\GitHub\02_Cell-Tower-Map-Locator\
 
 1. `git log --oneline -5` 確認目前分支狀態
 2. `node --check js/app.js` 確認語法
-3. 在瀏覽器開啟 `file:///D:/Development/GitHub/02_Cell-Tower-Map-Locator/index.html` 確認三圖磚切換正常顯示繁體中文
-4. 若驗證通過，`git push origin main`
-5. 開始 v3.3.0：乒乓 / 飄移智慧研判模組
+3. 使用實機手機驗證「貼上／手動」在 Clipboard API 被拒絕時是否能聚焦輸入框並顯示長按貼上指引
+4. 在瀏覽器開啟 `file:///D:/Development/GitHub/02_Cell-Tower-Map-Locator/index.html` 確認三圖磚切換與手機版控制項未重疊
+5. 開始 v3.3.0：乒乓／飄移智慧研判模組
