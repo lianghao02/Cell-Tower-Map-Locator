@@ -1,7 +1,7 @@
 # HANDOFF
 
 ## 目前狀態
-可交付（v3.2.2 已推送至 `origin/main`；靜態檢核通過）
+待推送（單筆定位文字解析修正已完成並通過自動解析測試）
 
 ---
 
@@ -10,6 +10,7 @@
 2. 新增三圖磚切換控制項（OpenStreetMap / 國土測繪 / 衛星空照）
 3. 修正行動瀏覽器 Clipboard API 被拒絕時的貼上退路
 4. 更新 README 與 CHANGELOG，準備發布 v3.2.2
+5. 支援不含「定位完成」欄位的單筆基地台／GMLC／方位角文字
 
 ---
 
@@ -36,6 +37,11 @@
 - 「貼上／手動」按鈕保留 Clipboard API 可用時的一鍵貼上流程
 - API 不支援、權限被拒絕或剪貼簿為空時，改為聚焦輸入框並顯示長按貼上指引
 - 提示使用 `role="status"` 與 `aria-live="polite"`，避免只用彈出警示中斷操作
+
+### 單筆定位文字解析（`js/app.js`）
+- 單筆來源即使沒有「定位完成」，只要包含基地台段落及時間或方位角，便會將基地台、方位角與 GMLC 綁定為同一筆資料。
+- 支援 `基地台座標／位置`、`Base Station Coordinates／Location`、`Bearing`、`Latitude／Longitude` 與 `detected at` 等別名。
+- GMLC 固定獨立保存與標示為「業者定位參考點」；基地台座標只用於扇形覆蓋分析。
 
 ### 版本歷程（本輪相關）
 | Commit | 說明 |
@@ -78,6 +84,7 @@
 - 圖磚 URL 格式目視確認（`.de` 替換 `.org`，`subdomains: 'abc'`）
 - `loadConfig()` 遷移邏輯目視確認（三個舊 URL 模式對應升級）
 - `L.control.layers` 三圖層初始化目視確認
+- 以 Node VM 實際解析：純文字單筆、完整表格單筆、英文基地台文字，皆正確取得基地台座標、方位角與可用的 GMLC／時間欄位。
 
 ### 尚未驗證
 - 瀏覽器實測：本機 `file:///index.html` 開啟後三圖磚實際顯示效果
@@ -90,9 +97,9 @@
 ---
 
 ## Git 狀態
-- Commit：`65cf509`（v3.2.2 行動版貼上、圖磚相容與文件更新）
-- Push：是（`origin/main`）
-- Working Tree：Clean
+- Commit：待建立（單筆定位文字解析修正）
+- Push：否（待使用者授權）
+- Working Tree：Modified（待提交）
 - Branch：`main`
 
 ---

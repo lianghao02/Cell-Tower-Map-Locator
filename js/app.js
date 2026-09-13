@@ -305,11 +305,11 @@
                     /序號\s+定位類別\s+定位狀態/.test(text) &&
                     portalRecordPattern.test(text);
                 const hasPortalRecords = portalRecordPattern.test(text);
-                const hasSingleRecordFragment =
-                    /(?:即時定位\s+)?(?:定位完成|無法定位)/.test(text) &&
-                    /基地[臺台]經緯度/.test(text) &&
-                    /三角定位\s*[（(]?GMLC[）)]?經緯度/.test(text) &&
-                    /(?:定位請求|註冊基地|定位基地[臺台]方向角)/.test(text);
+                const hasBaseStationSection = /基地[臺台](?:經緯度|座標|位置)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text);
+                const hasLocatorMetadata = /(?:定位請求|註冊基地|定位基地[臺台]方向角|Positioning Request|Base Station Reg|detected\s+at)/i.test(text);
+                const hasAzimuth = /(?:定位基地[臺台]方向角|基地[臺台](?:方向角|方位角)|天線方位角|Azimuth|Bearing|Dir)/i.test(text);
+                // 單筆來源未必包含「定位完成」，但同時具備基地台段落與定位欄位時可安全視為同一筆。
+                const hasSingleRecordFragment = hasBaseStationSection && (hasLocatorMetadata || hasAzimuth);
 
                 return hasCompleteResponse || hasPortalRecords || hasSingleRecordFragment;
             }
@@ -341,13 +341,13 @@
             // 從指定標題區段擷取經緯度，避免基地臺與 GMLC 座標互相混用
             function parsePortalCoordinateSection(block, sectionPattern, endPattern) {
                 const sectionMatch = block.match(new RegExp(
-                    `${sectionPattern}\\s*([\\s\\S]*?)(?=${endPattern}|$)`,
+                    `(?:${sectionPattern})\\s*([\\s\\S]*?)(?=${endPattern}|$)`,
                     "i"
                 ));
                 if (!sectionMatch) return null;
 
-                const lngMatch = sectionMatch[1].match(/經度\s*[：:]?\s*(-?\d{1,3}(?:\.\d+)?)/);
-                const latMatch = sectionMatch[1].match(/緯度\s*[：:]?\s*(-?\d{1,2}(?:\.\d+)?)/);
+                const lngMatch = sectionMatch[1].match(/(?:經度|Longitude|Lng)\s*[：:]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
+                const latMatch = sectionMatch[1].match(/(?:緯度|Latitude|Lat)\s*[：:]?\s*(-?\d{1,2}(?:\.\d+)?)/i);
                 if (!latMatch || !lngMatch) return null;
 
                 const lat = parseFloat(latMatch[1]);
@@ -368,6 +368,20 @@
                     const statusMatch = text.match(/(?:即時定位\s+)?(定位完成|無法定位)/);
                     if (statusMatch) {
                         recordStarts = [{ index: 0, 1: "1", 2: statusMatch[1] }];
+                    } else {
+                        const implicitStarts = [...text.matchAll(/(?:定位請求的時間|定位請求時間|請求定位時間|Positioning Request|detected\s+at)\s*[：:]?/gi)];
+                        if (implicitStarts.length === 1) {
+                            // 英文來源的 detected at 可能位在座標之後；單筆時從全文開始保留完整關聯。
+                            recordStarts = [{ index: 0, 1: "1", 2: "定位完成" }];
+                        } else if (implicitStarts.length > 1) {
+                            recordStarts = implicitStarts.map((match, index) => ({
+                                index: match.index,
+                                1: String(index + 1),
+                                2: "定位完成"
+                            }));
+                        } else if (/基地[臺台](?:經緯度|座標|位置)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text)) {
+                            recordStarts = [{ index: 0, 1: "1", 2: "定位完成" }];
+                        }
                     }
                 }
                 const declaredMatch = text.match(/定位紀錄筆數\s*[：:]?\s*(\d+)\s*筆/);
@@ -387,14 +401,14 @@
                     if (statusText === "定位完成") completedCount += 1;
                     else failedCount += 1;
 
-                    const reqMatch = block.match(/(?:定位請求的時間|定位請求時間|請求定位時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+                    const reqMatch = block.match(/(?:定位請求的時間|定位請求時間|請求定位時間|Positioning Request|detected\s+at)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/i);
                     const regMatch = block.match(/(?:註冊基地[臺台]時間|最後註冊時間|基地[臺台]註冊時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
                     const cellMatch = block.match(/(?:註冊基地[臺台]編號|基地[臺台]編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
-                    const azMatch = block.match(/(?:定位基地[臺台]方向角|基地[臺台](?:方向角|方位角)|天線方位角|Azimuth|Dir)\s*[：:]?\s*(-?\d+(?:\.\d+)?)/i);
+                    const azMatch = block.match(/(?:定位基地[臺台]方向角|基地[臺台](?:方向角|方位角)|天線方位角|Azimuth|Bearing|Dir)\s*[：:]?\s*(-?\d+(?:\.\d+)?)/i);
                     const phoneMatch = block.match(/行動電話號碼\s*[：:]?\s*(8869\d{8}|09\d{8})/);
                     const tower = parsePortalCoordinateSection(
                         block,
-                        "基地[臺台]經緯度",
+                        "基地[臺台](?:經緯度|座標|位置)|Base\\s*Station\\s*(?:Coordinates?|Location)",
                         "三角定位\\s*[（(]?GMLC[）)]?經緯度|行動電話號碼"
                     );
                     const gmlc = parsePortalCoordinateSection(
@@ -485,15 +499,16 @@
                     }
 
                     // B. 抓時間
-                    const reqM = block.match(new RegExp(`(?:定位請求|Positioning Request)[^:：\\d]*[:：]?\\s*${timePattern}`));
+                    const reqM = block.match(new RegExp(`(?:定位請求|Positioning Request|detected\\s+at)[^:：\\d]*[:：]?\\s*${timePattern}`, "i"));
                     const reqTime = reqM ? reqM[1].replace(/-/g, "/") : "";
 
                     const regM = block.match(new RegExp(`(?:註冊基地|最後註冊|Base Station Reg)[^:：\\d]*[:：]?\\s*${timePattern}`));
                     const regTime = regM ? regM[1].replace(/-/g, "/") : "";
 
                     // C. 抓方位角
-                    const azM = block.match(/(?:方位|方向|Dir|Azimuth)[^0-9\n]*([0-9]+(?:\.[0-9]+)?)/i);
-                    const azi = azM ? parseFloat(azM[1]) : null;
+                    const azM = block.match(/(?:方位|方向|Dir|Azimuth|Bearing)[^0-9\n]*([0-9]+(?:\.[0-9]+)?)/i);
+                    const rawAzi = azM ? parseFloat(azM[1]) : null;
+                    const azi = isValidAzimuth(rawAzi) ? rawAzi : null;
 
                     // D. 抓經緯度 (支援全格式: DMS/DMM 與 DD 成對)
                     let foundCoords = parseDMSToDD(block);
@@ -515,8 +530,8 @@
                             });
                         } else {
                             // 模式 B: 關鍵字個別搜尋
-                            const latM = block.match(/(?:緯度|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
-                            const lngM = block.match(/(?:經度|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
+                            const latM = block.match(/(?:緯度|Latitude|Lat)[^0-9\n]*([0-9]+\.[0-9]+)/i);
+                            const lngM = block.match(/(?:經度|Longitude|Lng)[^0-9\n]*([0-9]+\.[0-9]+)/i);
                             if (latM && lngM) {
                                 foundCoords.push({ lat: parseFloat(latM[1]), lng: parseFloat(lngM[1]) });
                             }
@@ -1077,7 +1092,7 @@
                         }
                         multiTowerLayers.push(m);
 
-                        // GMLC 為業者提供的定位座標，與基地台位置分開標示
+                        // GMLC 為業者回傳的裝置定位參考點；基地台位置只用於扇形覆蓋分析。
                         if (t.gmlcLat !== null && t.gmlcLat !== undefined &&
                             t.gmlcLng !== null && t.gmlcLng !== undefined) {
                             allCoords.push([t.gmlcLat, t.gmlcLng]);
@@ -1087,7 +1102,7 @@
                                 iconSize: [16, 16],
                                 iconAnchor: [8, 8]
                             });
-                            const gmlcPopup = `<b>🎯 GMLC 定位點 #${i + 1}</b><br>${esc(t.gmlcLat)}, ${esc(t.gmlcLng)}`;
+                            const gmlcPopup = `<b>🎯 GMLC 業者定位參考點 #${i + 1}</b><br>${esc(t.gmlcLat)}, ${esc(t.gmlcLng)}<br><span class="text-[10px] text-slate-500">業者回傳的裝置位置推估；非精確實際位置</span>`;
                             const gmlcMarker = L.marker([t.gmlcLat, t.gmlcLng], { icon: gmlcIcon })
                                 .addTo(map)
                                 .bindPopup(gmlcPopup);
