@@ -71,7 +71,7 @@
                 maxBatchLimit: 5,       // 批量解析最多上限 (筆)
                 sectorColor: "#2563eb",  // 扇形統一寶藍色
                 sectorFillOpacity: 0.15,// 15% 晶透透明度 (重疊自動加深不蓋圖)
-                mapTileUrl: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                mapTileUrl: "https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png",
                 boundsLatMin: 21,       // 台灣經緯度界線 (Lat Min)
                 boundsLatMax: 27,
                 boundsLngMin: 118,
@@ -191,6 +191,7 @@
                 data.addrLng = null;
                 data.addrName = "";
 
+
                 if (hasData) {
                     syncUI();
                     updateMap(false, "base"); // 不自動存入歷史，避免污染
@@ -202,6 +203,14 @@
                 if (saved) {
                     try {
                         config = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+                        // 遷移修正：舊版 OpenStreetMap 官方阻擋 URL、CartoDB 浮水印或法語鏡像，自動升級為 OSM 繁體中文全相容圖資
+                        const isOutdatedTile = !config.mapTileUrl ||
+                            config.mapTileUrl.includes("tile.openstreetmap.org") ||
+                            config.mapTileUrl.includes("cartocdn.com") ||
+                            config.mapTileUrl.includes("openstreetmap.fr");
+                        if (isOutdatedTile) {
+                            config.mapTileUrl = DEFAULT_CONFIG.mapTileUrl;
+                        }
                     } catch (e) {
                         console.error("Config parse error:", e);
                     }
@@ -948,11 +957,38 @@
                         defaultZoom = config.defaultZoom;
                     }
                     map = L.map("map", { maxZoom: 22 }).setView([centerLat, centerLng], defaultZoom);
-                    L.tileLayer(config.mapTileUrl, {
-                        maxZoom: 22,
+                    const osmLayer = L.tileLayer(config.mapTileUrl, {
+                        maxZoom: 20,
                         maxNativeZoom: 19,
+                        subdomains: 'abc',
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                    }).addTo(map);
+                    });
+                    osmLayer.on('tileerror', function(error, tile) {
+                        // 雙層自動容錯：若主圖磚伺服器連線異常，自動備援降級為內政部國土測繪圖資 (100% 繁體中文)
+                        const fallbackUrl = `https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/${error.coords.z}/${error.coords.y}/${error.coords.x}`;
+                        if (tile.src !== fallbackUrl) {
+                            tile.src = fallbackUrl;
+                        }
+                    });
+                    osmLayer.addTo(map);
+
+                    const nlscLayer = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}", {
+                        maxZoom: 20,
+                        maxNativeZoom: 19,
+                        attribution: '&copy; <a href="https://maps.nlsc.gov.tw">國土測繪圖資服務雲</a>'
+                    });
+
+                    const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+                        maxZoom: 19,
+                        attribution: '&copy; Esri'
+                    });
+
+                    // 支援一鍵快速切換底圖 (繁中 OSM / 臺灣通用電子地圖 / 衛星空照圖)
+                    L.control.layers({
+                        "🗺️ OpenStreetMap (繁體中文)": osmLayer,
+                        "🇹🇼 臺灣通用電子地圖 (國土測繪)": nlscLayer,
+                        "🛰️ 高解析衛星空照圖": satLayer
+                    }, null, { position: "topright" }).addTo(map);
 
                     map.on("click", (e) => {
                         if (!isMapSelectActive) return;
