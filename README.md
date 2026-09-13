@@ -1,6 +1,6 @@
-# 📡 手機門號基地台即時定位工具 (v3.2.1)
+# 📡 手機門號基地台即時定位工具 (v3.2.2)
 
-[![Version](https://img.shields.io/badge/version-v3.2.1-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.2.2-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-線上即開即用-emerald.svg)](https://lianghao02.github.io/Cell-Tower-Map-Locator/)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Mobile%20%7C%20Desktop-orange.svg)](#)
@@ -23,7 +23,7 @@
 
 ### 方式二：下載到電腦離線執行 (免安裝、免配置)
 
-如果您的環境無法直接連外網，或是想在本機常駐使用：
+如果想在本機常駐使用：
 
 1. **下載檔案**：
    - 點擊本專案右上角綠色按鈕 `Code` ➔ 選擇 **`Download ZIP`**（或至 [Releases 最新發布頁面](https://github.com/lianghao02/Cell-Tower-Map-Locator/releases) 下載 `Source code.zip`）。
@@ -32,11 +32,11 @@
 3. **啟動執行**：
    - **Windows 使用者**：直接滑鼠雙擊 **`啟動工具.bat`** 或 **`index.html`**。
    - **Mac / Linux 使用者**：直接用 Chrome 或 Edge 等瀏覽器開啟 **`index.html`**。
-   - **零環境依賴**：完全**不需安裝** Node.js、Python 或任何伺服器軟體，直接開啟即刻運作！
+   - **零環境依賴**：完全**不需安裝** Node.js、Python 或任何伺服器軟體，直接開啟即可使用；地圖圖磚、圖層與地址搜尋仍需網路連線。
 
 ---
 
-## 🏆 v3.2.1 重點特色與核心功能
+## 🏆 v3.2.2 重點特色與核心功能
 
 ### 1. 🎯 扇形交集空間分析引擎 (Sector Intersection Spatial Analysis)
 - **多邊形自動交集**：在「最近歷史」勾選 2 筆以上紀錄，系統以 Sutherland-Hodgman 剪裁演算法自動求解所有扇形的幾何重疊區域。
@@ -59,6 +59,11 @@
 ### 5. 📱 行動端戰術底部抽屜 (Bottom Sheet) & GPS 導航
 - **響應式抽屜**：頂部拉把流暢收合，留出最大地圖視野；支援收合狀態摘要列。
 - **GPS 藍光脈衝定位**：一鍵獲取自身位置與精度半徑圈，自動計算自身與目標基地台直線距離、方位角連線，並提供一鍵 Google Maps 戰術路線導航。
+- **貼上／手動退路**：手機瀏覽器禁止讀取剪貼簿時，輸入框會自動取得焦點並提示長按後選擇「貼上」，不會讓案件文字遺失或卡在錯誤訊息。
+
+### 6. 🗺️ 本機開啟圖磚相容與圖層切換
+- **本機相容圖磚**：預設採用可支援本機 `file:///` 開啟的 OpenStreetMap 圖磚來源，避免官方圖磚因 Referer 限制造成空白地圖。
+- **三種底圖**：可在右上角切換 OpenStreetMap、臺灣通用電子地圖與高解析衛星空照圖；預設圖磚載入失敗時自動改用臺灣通用電子地圖。
 
 ---
 
@@ -86,4 +91,4 @@ powershell -ExecutionPolicy Bypass -File scripts\qa.ps1
 
 ## 📄 版權聲明 (License)
 
-System Version 3.2.1 &copy; 2026 Cell Phone Locator. All rights reserved.
+System Version 3.2.2 &copy; 2026 Cell Phone Locator. All rights reserved.

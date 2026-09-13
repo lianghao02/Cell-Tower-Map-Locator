@@ -1,15 +1,15 @@
 # HANDOFF
 
 ## 目前狀態
-可交付（Working Tree Clean，主功能完整驗證）
+待推送（已完成靜態檢核；本機 `file:///` 瀏覽器視覺實測受 Codex 瀏覽器政策限制）
 
 ---
 
 ## 本輪目標
 1. 修復本機 `file:///` 環境圖磚 403 問題（OSM 官方阻擋 Referer=null）
-2. 新增三圖磚切換控制項（繁中 OSM / 國土測繪 / 衛星空照）
-3. 提升 Google Maps 導航按鈕可讀性（對比度修復）
-4. 整理專案並交接 Codex
+2. 新增三圖磚切換控制項（OpenStreetMap / 國土測繪 / 衛星空照）
+3. 修正行動瀏覽器 Clipboard API 被拒絕時的貼上退路
+4. 更新 README 與 CHANGELOG，準備發布 v3.2.2
 
 ---
 
@@ -32,6 +32,11 @@
 - `@media max-width: 768px` 底部抽屜收合/展開完整
 - GPS FAB 按鈕（`locateMe()`）於手機端正常運作，藍光脈衝動畫正確
 
+### 行動版貼上退路（`index.html`、`js/app.js`）
+- 「貼上／手動」按鈕保留 Clipboard API 可用時的一鍵貼上流程
+- API 不支援、權限被拒絕或剪貼簿為空時，改為聚焦輸入框並顯示長按貼上指引
+- 提示使用 `role="status"` 與 `aria-live="polite"`，避免只用彈出警示中斷操作
+
 ### 版本歷程（本輪相關）
 | Commit | 說明 |
 |--------|------|
@@ -42,8 +47,6 @@
 ---
 
 ## 刻意未修改
-- `README.md`：v3.2.1 說明仍正確，圖磚說明可於 v3.3.0 一併更新
-- `CHANGELOG.md`：圖磚修復屬補丁性質，可在 v3.3.0 一起寫
 - `index.html`：HTML 結構未動，所有修改限於 `js/app.js` 與 `css/style.css`
 
 ---
@@ -87,9 +90,9 @@
 ---
 
 ## Git 狀態
-- Commit：`f305e9e`
-- Push：**否**（尚未 push，待確認後再 push）
-- Working Tree：**Clean**
+- Commit：待建立（v3.2.2 發布文件與行動版貼上修正）
+- Push：待本輪 Commit 後推送
+- Working Tree：Modified（待提交）
 - Branch：`main`
 
 ---

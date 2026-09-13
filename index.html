@@ -314,7 +314,9 @@
                         </div>
                         <textarea id="rawInput"
                             class="smart-area w-full border border-slate-300 rounded-xl p-3 text-xs font-mono transition-all bg-white/90 h-[90px] focus:border-accent focus:ring-4 focus:ring-accent/10 focus:bg-white focus:outline-none mb-1 shadow-inner"
-                            placeholder="長按貼上... (支援多筆 LINE/簡訊 格式，上限5筆)"></textarea>
+                            placeholder="長按貼上... (支援多筆 LINE/簡訊 格式，上限5筆)"
+                            aria-describedby="pasteHint"></textarea>
+                        <p id="pasteHint" class="hidden -mt-1 text-center text-[11px] font-medium text-amber-700" role="status" aria-live="polite"></p>
 
                         <!-- 批量解析提示面板 -->
                         <div id="batchNotice" class="hidden bg-sky-50 border border-sky-200 rounded-xl p-2 text-[11px] text-sky-700 font-medium flex items-center gap-1.5 shadow-sm">
@@ -325,8 +327,8 @@
                         <div class="flex gap-2">
                             <button
                                 class="btn flex-1 bg-gradient-to-b from-emerald-400 to-emerald-500 text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:shadow-emerald-500/20 transition-all border border-emerald-600/20 text-xs"
-                                onclick="app.pasteInput()">
-                                <i class="fa-solid fa-paste"></i> 貼上
+                                type="button" onclick="app.pasteInput()">
+                                <i class="fa-solid fa-paste"></i> 貼上／手動
                             </button>
                             <button
                                 class="btn flex-1 bg-gradient-to-b from-slate-400 to-slate-500 text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:shadow-slate-500/20 transition-all border border-slate-600/20 text-xs"

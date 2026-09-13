@@ -2018,13 +2018,30 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
             }
 
             function pasteInput() {
-                if (navigator.clipboard && navigator.clipboard.readText) {
-                    navigator.clipboard.readText()
-                        .then((text) => { document.getElementById("rawInput").value = text; })
-                        .catch(() => alert("無法讀取剪貼簿，請手動貼上 (需允許瀏覽器權限)"));
-                } else {
-                    alert("您的瀏覽器不支援自動貼上，請長按輸入框手動貼上。");
+                const input = document.getElementById("rawInput");
+                const hint = document.getElementById("pasteHint");
+                const showManualPasteHint = (message) => {
+                    input.focus({ preventScroll: true });
+                    hint.textContent = message;
+                    hint.classList.remove("hidden");
+                };
+
+                if (!navigator.clipboard || !navigator.clipboard.readText) {
+                    showManualPasteHint("此瀏覽器無法自動讀取剪貼簿，請長按輸入框後選擇「貼上」。");
+                    return;
                 }
+
+                navigator.clipboard.readText()
+                    .then((text) => {
+                        if (!text) {
+                            showManualPasteHint("剪貼簿沒有可貼上的文字，請長按輸入框後選擇「貼上」。");
+                            return;
+                        }
+                        input.value = text;
+                        hint.classList.add("hidden");
+                        input.focus({ preventScroll: true });
+                    })
+                    .catch(() => showManualPasteHint("瀏覽器禁止自動讀取剪貼簿，請長按輸入框後選擇「貼上」。"));
             }
 
             function clearInput() {
