@@ -1,7 +1,7 @@
 # HANDOFF
 
 ## 目前狀態
-待推送（單筆定位文字與手機優先操作流程已完成靜態檢核）
+可交付（單筆定位文字與手機優先操作流程已推送至 `origin/main`）
 
 ---
 
@@ -106,9 +106,9 @@
 ---
 
 ## Git 狀態
-- Commit：待建立（手機優先單筆檢視與明確比對流程）
-- Push：否（待使用者授權）
-- Working Tree：Modified（待提交）
+- Commit：`d485f2b`（手機優先單筆檢視與明確比對流程）
+- Push：是（`origin/main`）
+- Working Tree：Clean
 - Branch：`main`
 
 ---
