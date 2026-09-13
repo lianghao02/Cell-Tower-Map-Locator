@@ -545,13 +545,13 @@
                     foundCoords.forEach(c => {
                         if (c.lat >= config.boundsLatMin && c.lat <= config.boundsLatMax &&
                             c.lng >= config.boundsLngMin && c.lng <= config.boundsLngMax) {
-                            
-                            const isDup = parsedList.some(item => 
-                                Math.abs(item.lat - c.lat) < 0.00001 && 
+
+                            const isDup = parsedList.some(item =>
+                                Math.abs(item.lat - c.lat) < 0.00001 &&
                                 Math.abs(item.lng - c.lng) < 0.00001 &&
                                 item.reqTime === reqTime
                             );
-                            
+
                             if (!isDup) {
                                 parsedList.push({
                                     lat: c.lat,
@@ -748,11 +748,21 @@
 
                 document.getElementById("addrLat").value = data.addrLat !== null ? data.addrLat : "";
                 document.getElementById("addrLng").value = data.addrLng !== null ? data.addrLng : "";
-                
+
                 // 只有當輸入框無內容時才以解析名稱覆蓋；保留使用者打字，防止同名地名直接覆蓋使用者輸入
                 const addrInput = document.getElementById("targetAddr");
                 if (addrInput && (!addrInput.value.trim() || data.addrName === "")) {
                     addrInput.value = data.addrName;
+                }
+
+                // 商業級狀態控制：有有效座標時呈現快捷行動列，無資料時平順隱藏
+                const resultActions = document.getElementById("resultActions");
+                if (resultActions) {
+                    if (data.lat !== null && data.lng !== null && !isNaN(data.lat) && !isNaN(data.lng)) {
+                        resultActions.classList.remove("hidden");
+                    } else {
+                        resultActions.classList.add("hidden");
+                    }
                 }
             }
 
@@ -785,16 +795,16 @@
             function locateAddress() {
                 let addr = document.getElementById("targetAddr").value.trim();
                 if (!addr) return alert("請先輸入要定位的地址！");
-                
+
                 data.searchQuery = addr; // 保存使用者輸入的原始查詢字詞
-                
+
                 // 智慧模糊容錯 A：簡繁體轉譯
                 addr = addr.replace(/台/g, "臺");
-                
+
                 // 智慧模糊容錯 B：剔除詳細室內樓層或房號字尾，僅保留主建物門牌以增加搜尋命中率
                 let cleanAddr = addr.replace(/(?:\d+\s*[樓室Ff].*)$/g, "");
                 cleanAddr = cleanAddr.replace(/(?:[0-9一二三四五六七八九十百]+(?:樓|室|f|F|層).*)$/g, "");
-                
+
                 const btn = document.getElementById("btnLocateAddr");
                 const origIcon = btn.innerHTML;
                 btn.disabled = true;
@@ -802,7 +812,7 @@
 
                 // 限制在台灣經緯度範圍內搜尋
                 const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanAddr)}&format=json&limit=1&viewbox=118,21,124,27&bounded=1`;
-                
+
                 fetch(url, {
                     headers: {
                         "Accept-Language": "zh-TW,zh;q=0.9"
@@ -817,12 +827,12 @@
                 .then(res => {
                     btn.disabled = false;
                     btn.innerHTML = origIcon;
-                    
+
                     if (res && res.length > 0) {
                         const result = res[0];
                         data.addrLat = parseFloat(parseFloat(result.lat).toFixed(6));
                         data.addrLng = parseFloat(parseFloat(result.lon).toFixed(6));
-                        
+
                         // 智慧擷取地名描述，自動提取縣市、市區鄉鎮與地標名，防止同名誤判
                         const parts = result.display_name.split(',').map(p => p.trim());
                         let formattedName = parts[0];
@@ -836,7 +846,7 @@
                             }
                         }
                         data.addrName = formattedName;
-                        
+
                         syncUI();
                         updateMap(false);
                     } else {
@@ -857,9 +867,9 @@
                 data.addrLng = null;
                 data.addrName = "";
                 data.searchQuery = "";
-                
+
                 syncUI();
-                
+
                 // 若當前對應著某個歷史紀錄，同步清除該歷史紀錄的空間欄位
                 if (currentHistoryId !== null) {
                     const idx = history.findIndex(h => h.id === currentHistoryId);
@@ -871,20 +881,20 @@
                         renderHistory();
                     }
                 }
-                
+
                 updateMap(false);
             }
 
             // 切換地圖選點模式
             function toggleMapSelect(e, forceState) {
                 if (e) e.preventDefault();
-                
+
                 if (forceState !== undefined) {
                     isMapSelectActive = forceState;
                 } else {
                     isMapSelectActive = !isMapSelectActive;
                 }
-                
+
                 const btn = document.getElementById("btnMapSelect");
                 const statusText = document.getElementById("mapSelectStatus");
 
@@ -1270,7 +1280,7 @@
                             analysisPanel.classList.remove("hidden");
                             document.getElementById("analysisDistance").innerText = `${dist} 公尺`;
                             document.getElementById("analysisBearing").innerText = `${bearing}°`;
-                            
+
                             const nameEl = document.getElementById("analysisResultName");
                             if (nameEl) {
                                 nameEl.innerText = data.addrName || "自訂位置";
@@ -1295,7 +1305,7 @@
                                 if (data.searchQuery) {
                                     // 智慧判定：若為純座標數值查詢（如 23.93, 120.52），直接豁免字詞比對校驗
                                     const isCoordinateQuery = /^[0-9\.,\s-]+$/.test(data.searchQuery.trim());
-                                    
+
                                     if (!isCoordinateQuery) {
                                         let cleanInput = data.searchQuery.replace(/臺灣|台灣|臺南|台南|台北|臺北|台中|臺中|高雄|新北|桃園|基隆|新竹|苗栗|彰化|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江/g, "");
                                         let kw = cleanInput.replace(/派出所|分局|警察局|分駐所|局|處|所|科|辦事處|委員會/g, "").trim();
@@ -1935,6 +1945,9 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                                     <span class="history-time text-[0.7rem] font-medium text-slate-400 truncate">${esc(item.time)}</span>
                                 </div>
                                 <div class="flex items-center gap-1">
+                                    <button class="text-slate-400 hover:text-blue-600 p-0.5 border-none bg-transparent cursor-pointer transition-colors active:scale-90" onclick="app.copyHistoryItem(${item.id}, event)" title="快速複製此筆座標資訊">
+                                        <i class="fa-regular fa-copy text-xs"></i>
+                                    </button>
                                     <button class="text-slate-400 hover:text-accent p-0.5 border-none bg-transparent cursor-pointer transition-colors" onclick="app.loadToForm(${item.id}, event)" title="載入至表單進行編輯">
                                         <i class="fa-solid fa-pen-to-square text-xs"></i>
                                     </button>
@@ -2012,6 +2025,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
                 updateMap(false, focusType);
                 renderHistory();
+                switchTab("base");
                 if (isMobileLayout()) toggleConsole(true);
             }
 
@@ -2033,6 +2047,33 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     switchTab('compare');
                 } else {
                     switchTab('base');
+                }
+            }
+
+            // 快速複製單筆歷史紀錄座標與時間資訊
+            function copyHistoryItem(id, e) {
+                if (e) e.stopPropagation();
+                const item = history.find(h => h.id === id);
+                if (!item) return;
+
+                let parts = [`${item.lat}, ${item.lng}`];
+                if (item.azi !== null && item.azi !== undefined && !isNaN(item.azi)) {
+                    parts.push(`方位角 ${item.azi}°`);
+                }
+                if (item.reqTime) {
+                    parts.push(item.reqTime);
+                }
+                if (item.phone) {
+                    parts.push(`門號 ${item.phone}`);
+                }
+                const text = parts.join(" | ");
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text)
+                        .then(() => alert("✅ 座標與時間已複製"))
+                        .catch(() => fallbackCopy(text));
+                } else {
+                    fallbackCopy(text);
                 }
             }
 
@@ -2372,7 +2413,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
 
                         if (map) {
                             myLocationMarker = L.marker([lat, lng], { icon: pulseIcon }).addTo(map).bindPopup(popupContent);
-                            
+
                             // 2. 建立 GPS 誤差半徑圓圈
                             myLocationCircle = L.circle([lat, lng], {
                                 radius: accuracy,
@@ -2439,6 +2480,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 clearHistorySelection,
                 loadToForm,
                 viewHistoryItem,
+                copyHistoryItem,
                 focusIntersection,
                 toggleShowIntersectionOnly,
                 clipPolygon,

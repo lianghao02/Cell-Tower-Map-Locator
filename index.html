@@ -68,18 +68,18 @@
             text-size-adjust: 100%;
             font-family: Inter, "Noto Sans TC", sans-serif;
           }
-      
+
           button,
           input:where([type='button']),
           input:where([type='reset']),
           input:where([type='submit']) {
             appearance: button;
           }
-      
+
           [type='search'] {
             appearance: textfield;
           }
-      
+
           /* 解決 display: block 與 vertical-align: middle 的衝突警告 */
           img,
           svg,
@@ -248,11 +248,11 @@
 
     <!-- 4. 前台懸浮覆蓋層 (z-10, pointer-events-none 允許穿透操作地圖) -->
     <div class="fixed inset-0 z-10 pointer-events-none p-4 md:p-6 flex flex-col justify-between">
-        
+
         <!-- 左上角大一統控制台 (手機端自動轉為底部抽屜 Bottom Sheet) -->
         <div id="floating-console" class="absolute top-4 md:top-6 left-4 md:left-6 z-20 pointer-events-auto w-[360px] flex flex-col transition-all duration-300">
             <div id="console-card" class="bg-white/85 backdrop-blur-xl border border-white/60 rounded-2xl shadow-2xl p-4 flex flex-col overflow-hidden max-h-[calc(100vh-80px)]">
-                
+
                 <!-- 手機端頂部拉把 (Handle Bar) -->
                 <button id="btnSheetHandle" type="button" class="sheet-handle-bar justify-center items-center py-1 -mt-1 mb-1 cursor-pointer select-none w-full border-none bg-transparent" onclick="app.toggleConsole()" aria-controls="console-card" aria-expanded="true" aria-label="收合或展開查詢控制台">
                     <div class="w-10 h-1.5 bg-slate-300/80 rounded-full hover:bg-slate-400 transition-colors"></div>
@@ -306,7 +306,7 @@
 
                 <!-- 各 Tab 內容容器 -->
                 <div class="flex-1 overflow-y-auto pr-0.5 space-y-3" style="max-height: calc(100vh - 200px);">
-                    
+
                     <!-- Tab 1: 智慧解析 -->
                     <div id="tab-content-parse" class="tab-content space-y-3">
                         <div class="hint text-center text-[11px] text-slate-500 font-medium">
@@ -344,34 +344,36 @@
                             <i class="fa-solid fa-bolt"></i> 解析並定位
                         </button>
 
-                        <!-- 解析成功後才顯示的結果操作 -->
-                        <div id="resultActions" class="action-grid hidden grid-cols-2 gap-2 pt-2 border-t border-slate-200/50" aria-label="結果操作">
-                            <button
-                                class="btn bg-white hover:bg-slate-50 text-slate-800 hover:text-blue-700 py-2 px-3 rounded-xl font-bold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md transition-all border border-slate-300 text-xs"
-                                onclick="app.openMap()">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="GMap" class="w-4 h-4"> Google Map
-                            </button>
-                            <button
-                                class="btn bg-white text-slate-700 py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-md hover:text-copy transition-all border border-slate-200 text-xs"
-                                onclick="app.copy()">
-                                <i class="fa-regular fa-copy text-copy"></i> 複製資訊
-                            </button>
-                            <button
-                                class="btn bg-gradient-to-b from-[#38bdf8] to-[#0ea5e9] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#0ea5e9]/20 transition-all border border-[#0284c7]/20 text-xs"
-                                onclick="app.share('tg')">
-                                <i class="fa-brands fa-telegram"></i> Telegram
-                            </button>
-                            <button
-                                class="btn bg-gradient-to-b from-[#4ade80] to-[#22c55e] text-white py-2 px-3 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 hover:shadow-lg hover:shadow-[#22c55e]/20 transition-all border border-[#16a34a]/20 text-xs"
-                                onclick="app.share('line')">
-                                <i class="fa-brands fa-line"></i> LINE
-                            </button>
-                        </div>
+
                     </div>
 
                     <!-- Tab 2: 定位資料 -->
                     <div id="tab-content-base" class="tab-content hidden space-y-3">
-                        
+
+                        <!-- 頂部商業級快捷行動列 (單行 4 等分，解析成功或載入歷史後顯示) -->
+                        <div id="resultActions" class="grid grid-cols-4 gap-1.5 pb-1 border-b border-slate-200/60" aria-label="快捷行動列">
+                            <button
+                                class="btn bg-white hover:bg-slate-50 text-slate-800 hover:text-blue-700 py-2 px-1 rounded-xl font-bold cursor-pointer flex items-center justify-center gap-1 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 hover:shadow-md transition-all border border-slate-300 text-xs shadow-xs"
+                                onclick="app.openMap()" title="開啟 Google Map 導航">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/a/aa/Google_Maps_icon_%282020%29.svg" alt="GMap" class="w-3.5 h-3.5"> GMap
+                            </button>
+                            <button
+                                class="btn bg-white text-slate-700 hover:text-blue-600 py-2 px-1 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 hover:shadow-md transition-all border border-slate-200 text-xs shadow-xs"
+                                onclick="app.copy()" title="複製定位文字資訊">
+                                <i class="fa-regular fa-copy text-slate-500"></i> 複製
+                            </button>
+                            <button
+                                class="btn bg-gradient-to-b from-[#38bdf8] to-[#0ea5e9] text-white py-2 px-1 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 hover:shadow-md hover:shadow-[#0ea5e9]/20 transition-all border border-[#0284c7]/20 text-xs shadow-xs"
+                                onclick="app.share('tg')" title="分享至 Telegram">
+                                <i class="fa-brands fa-telegram"></i> TG
+                            </button>
+                            <button
+                                class="btn bg-gradient-to-b from-[#4ade80] to-[#22c55e] text-white py-2 px-1 rounded-xl font-semibold cursor-pointer flex items-center justify-center gap-1 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 hover:shadow-md hover:shadow-[#22c55e]/20 transition-all border border-[#16a34a]/20 text-xs shadow-xs"
+                                onclick="app.share('line')" title="分享至 LINE">
+                                <i class="fa-brands fa-line"></i> LINE
+                            </button>
+                        </div>
+
                         <!-- 多點時間軸面板 (當有多筆資料時顯示) -->
                         <div id="multiTowerContainer" class="hidden space-y-2">
                             <div class="flex justify-between items-center bg-slate-100/80 p-2 rounded-xl border border-slate-200/60 text-[11px] font-bold text-slate-700">
@@ -571,7 +573,7 @@
             <button id="btnMyLocation" class="w-12 h-12 bg-white/95 hover:bg-white text-slate-700 hover:text-accent rounded-full shadow-xl border border-white/80 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 group" onclick="app.locateMe()" title="我的目前位置 (GPS)">
                 <i class="fa-solid fa-location-crosshairs text-lg text-accent group-hover:rotate-45 transition-transform" id="iconMyLocation"></i>
             </button>
-            
+
             <!-- 2. 手機版控制台喚起 FAB -->
         <button id="btnOpenSheetFab" class="md:hidden w-12 h-12 bg-accent hover:bg-blue-600 text-white rounded-full shadow-xl border border-white/60 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95" onclick="app.toggleConsole(false)" title="展開查詢控制台" aria-controls="console-card" aria-expanded="false" aria-label="展開查詢控制台">
                 <i class="fa-solid fa-magnifying-glass-location text-base"></i>
