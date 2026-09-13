@@ -15,6 +15,8 @@
             let isMapSelectActive = false; // 地圖選點模式狀態
             let currentHistoryId = null; // 當前歷史紀錄 ID 追蹤
             let selectedHistoryIds = new Set(); // 多選歷史紀錄 ID 集合 (用於多筆疊加比對)
+            let isHistoryCompareActive = false; // 僅在使用者明確開始後才疊加歷史資料
+            let isHistorySingleView = false; // 從歷史檢視單筆時，不自動繪製同批次軌跡
             let isIntersectionOnly = false; // 是否僅高亮顯示扇形交集區
             let lastIntersectionData = null; // 最新計算出的交集資訊 { polygon, area, centroid, towerCount }
             let lastIntersectionStatus = "idle"; // idle | insufficient-sectors | no-intersection | intersection
@@ -459,6 +461,8 @@
             function parse() {
                 const text = normalizeInputText(document.getElementById("rawInput").value);
                 if (!text) return alert("請先貼上內容！");
+                const resultActions = document.getElementById("resultActions");
+                if (resultActions) resultActions.classList.add("hidden");
 
                 // 1. 全局抓取門號 (作為預設 fallback)
                 let globalPhone = "";
@@ -611,13 +615,19 @@
                         const limitText = originalCount > config.maxBatchLimit
                             ? `，目前依既有上限載入最新 ${config.maxBatchLimit} 筆`
                             : "";
-                        const sectorReadyCount = parsedList.filter(t => isValidAzimuth(t.azi)).length;
+                        const sectorReadyCount = finalTowers.filter(t => isValidAzimuth(t.azi)).length;
                         const qualityNotes = [];
                         if (portalResult.missingTowerCount) qualityNotes.push(`${portalResult.missingTowerCount} 筆缺少有效基地台座標`);
                         if (portalResult.missingAzimuthCount) qualityNotes.push(`${portalResult.missingAzimuthCount} 筆未提供方位角`);
                         if (portalResult.invalidAzimuthCount) qualityNotes.push(`${portalResult.invalidAzimuthCount} 筆方位角無效`);
-                        const qualityText = qualityNotes.length ? `；待確認：${qualityNotes.join('、')}` : "";
-                        batchNoticeText.innerText = `完整回覆 ${portalResult.parsedCount} 筆：完成 ${portalResult.completedCount}、無法定位 ${portalResult.failedCount}；可繪製基地台 ${originalCount}、可分析扇區 ${sectorReadyCount}${qualityText}${limitText}。`;
+                        if (originalCount === 1 && qualityNotes.length === 0) {
+                            const tower = finalTowers[0];
+                            const available = ["基地台", tower.gmlcLat !== null && tower.gmlcLng !== null ? "GMLC" : "", isValidAzimuth(tower.azi) ? "方位角" : ""].filter(Boolean);
+                            batchNoticeText.innerText = `已辨識 1 筆定位資料：${available.join("、")}皆可用。`;
+                        } else {
+                            const qualityText = qualityNotes.length ? `；待確認：${qualityNotes.join('、')}` : "";
+                            batchNoticeText.innerText = `已辨識 ${originalCount} 筆定位資料，已依請求時間排序；可進行扇形分析 ${sectorReadyCount} 筆${qualityText}${limitText}。`;
+                        }
                     }
                 } else if (originalCount > config.maxBatchLimit) {
                     finalTowers = parsedList.slice(-config.maxBatchLimit);
@@ -642,6 +652,12 @@
                 data.phone = finalTowers[0].phone;
                 data.reqTime = finalTowers[0].reqTime;
                 data.regTime = finalTowers[0].regTime;
+                selectedHistoryIds.clear();
+                isHistoryCompareActive = false;
+                isHistorySingleView = false;
+                isIntersectionOnly = false;
+
+                if (resultActions) resultActions.classList.remove("hidden");
 
                 // 清除舊目標地址
                 data.addrName = "";
@@ -703,9 +719,12 @@
                         regTime: data.regTime
                     }];
 
-                    // 若原本在多選歷史比對模式下進行手動編輯，回歸單點模式
-                    if (selectedHistoryIds.size > 0) {
+                    // 手動修改後回歸一般單點模式。
+                    if (selectedHistoryIds.size > 0 || isHistoryCompareActive) {
                         selectedHistoryIds.clear();
+                        isHistoryCompareActive = false;
+                        isHistorySingleView = false;
+                        isIntersectionOnly = false;
                         renderHistory();
                     }
 
@@ -1029,7 +1048,7 @@
                 }
 
                 // --- 模式分支 A：多筆歷史紀錄疊加比對模式 (當選取 >= 2 筆時) ---
-                if (selectedHistoryIds.size >= 2) {
+                if (isHistoryCompareActive && selectedHistoryIds.size >= 2) {
                     renderMultiHistoryComparison();
                     return;
                 }
@@ -1138,7 +1157,7 @@
                     });
 
                     // 繪製多點軌跡連線 (Polyline Path)
-                    if (towers.length > 1) {
+                    if (towers.length > 1 && !isHistorySingleView) {
                         const pathCoords = towers.map(t => [
                             t.gmlcLat !== null && t.gmlcLat !== undefined ? t.gmlcLat : t.lat,
                             t.gmlcLng !== null && t.gmlcLng !== undefined ? t.gmlcLng : t.lng
@@ -1770,56 +1789,52 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 updateMap(false);
             }
 
-            // 切換單一歷史項目的勾選狀態 (多選比對不跳轉分頁)
+            // 勾選只建立比對清單；不自動覆蓋目前地圖，需由使用者明確開始比對。
             function toggleHistorySelect(id, e) {
                 if (e) e.stopPropagation();
+                const wasComparing = isHistoryCompareActive;
 
                 if (selectedHistoryIds.has(id)) {
                     selectedHistoryIds.delete(id);
                 } else {
                     selectedHistoryIds.add(id);
                 }
-
-                if (selectedHistoryIds.size === 1) {
-                    const singleId = Array.from(selectedHistoryIds)[0];
-                    const item = history.find(h => h.id === singleId);
-                    if (item) {
-                        data = {
-                            lat: item.lat,
-                            lng: item.lng,
-                            azi: item.azi,
-                            phone: item.phone,
-                            reqTime: item.reqTime,
-                            regTime: item.regTime,
-                            addrLat: item.addrLat !== undefined ? item.addrLat : null,
-                            addrLng: item.addrLng !== undefined ? item.addrLng : null,
-                            addrName: item.addrName !== undefined ? item.addrName : "",
-                            searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
-                            towers: Array.isArray(item.towers) && item.towers.length > 0 ? item.towers.map(tower => ({ ...tower })) : [{
-                                lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime
-                            }],
-                        };
-                        currentHistoryId = item.id;
-                        syncUI();
-                    }
-                }
-
-                updateMap(false, "bounds");
+                isHistoryCompareActive = false;
+                isIntersectionOnly = false;
+                if (wasComparing) updateMap(false, "base");
                 renderHistory();
             }
 
-            // 全選歷史紀錄進行比對
+            // 全選只建立比對清單；仍需手動開始比對。
             function selectAllHistory() {
                 if (!history.length) return;
                 history.forEach(item => selectedHistoryIds.add(item.id));
-                updateMap(false, "bounds");
+                isHistoryCompareActive = false;
+                isIntersectionOnly = false;
                 renderHistory();
             }
 
-            // 清除歷史比對選取
+            // 明確開始多筆空間比對。
+            function startHistoryComparison() {
+                if (selectedHistoryIds.size < 2) {
+                    alert("請先勾選至少 2 筆歷史資料再開始比對。");
+                    return;
+                }
+                isHistoryCompareActive = true;
+                isHistorySingleView = false;
+                isIntersectionOnly = false;
+                updateMap(false, "bounds");
+                renderHistory();
+                if (isMobileLayout()) toggleConsole(true);
+            }
+
+            // 清除歷史比對選取，回到目前單筆地圖。
             function clearHistorySelection() {
+                const wasComparing = isHistoryCompareActive;
                 selectedHistoryIds.clear();
-                updateMap(false);
+                isHistoryCompareActive = false;
+                isIntersectionOnly = false;
+                if (wasComparing) updateMap(false, "base");
                 renderHistory();
             }
 
@@ -1852,6 +1867,10 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 const compareCountEl = document.getElementById("historyCompareCount");
                 const compareNoticeEl = document.getElementById("historyCompareNotice");
                 const activeCountEl = document.getElementById("historyCompareActiveCount");
+                const noticeTextEl = document.getElementById("historyCompareNoticeText");
+                const noticeIconEl = document.getElementById("historyCompareNoticeIcon");
+                const startButton = document.getElementById("btnStartHistoryComparison");
+                const intersectionCard = document.getElementById("historyIntersectionCard");
 
                 const count = selectedHistoryIds.size;
                 if (compareCountEl) compareCountEl.innerText = count;
@@ -1860,10 +1879,21 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     if (count >= 2) {
                         compareNoticeEl.classList.remove("hidden");
                         if (activeCountEl) activeCountEl.innerText = count;
+                        if (noticeTextEl) noticeTextEl.innerText = isHistoryCompareActive ? "正在比較" : "已選取";
+                        if (noticeIconEl) noticeIconEl.className = isHistoryCompareActive ? "fa-solid fa-eye text-blue-600" : "fa-solid fa-list-check text-blue-600";
+                        if (startButton) {
+                            startButton.innerHTML = isHistoryCompareActive
+                                ? '看地圖 <i class="fa-solid fa-arrow-right text-[9px]"></i>'
+                                : '開始比對 <i class="fa-solid fa-arrow-right text-[9px]"></i>';
+                            startButton.onclick = isHistoryCompareActive
+                                ? () => toggleConsole(true)
+                                : () => startHistoryComparison();
+                        }
                     } else {
                         compareNoticeEl.classList.add("hidden");
                     }
                 }
+                if (!isHistoryCompareActive && intersectionCard) intersectionCard.classList.add("hidden");
 
                 ul.innerHTML = "";
                 if (!history.length) {
@@ -1940,20 +1970,15 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     </div>
                     `;
 
-                    // 點擊項目本體：切換選取狀態並更新地圖（完全不跳轉分頁）
+                    // 點擊項目本體：單筆檢視；勾選框才會加入多筆比對清單。
                     li.onclick = (e) => {
-                        toggleHistorySelect(item.id, e);
+                        viewHistoryItem(item.id, e);
                     };
                     ul.appendChild(li);
                 });
             }
 
-            // 主動載入特定歷史紀錄至定位/關聯表單並切換分頁
-            function loadToForm(id, e) {
-                if (e) e.stopPropagation();
-                const item = history.find(h => h.id === id);
-                if (!item) return;
-
+            function applyHistoryItem(item) {
                 data = {
                     lat: item.lat,
                     lng: item.lng,
@@ -1970,8 +1995,37 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     }],
                 };
                 currentHistoryId = item.id;
+            }
+
+            // 點擊歷史卡的預設行為：只檢視單筆，不比較交集也不畫同批次路線。
+            function viewHistoryItem(id, e) {
+                if (e) e.stopPropagation();
+                const item = history.find(h => h.id === id);
+                if (!item) return;
+
+                applyHistoryItem(item);
                 selectedHistoryIds.clear();
-                selectedHistoryIds.add(item.id);
+                isHistoryCompareActive = false;
+                isHistorySingleView = true;
+                isIntersectionOnly = false;
+                syncUI();
+                const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
+                updateMap(false, focusType);
+                renderHistory();
+                if (isMobileLayout()) toggleConsole(true);
+            }
+
+            // 編輯按鈕才會載入定位／關聯表單，保留原本可調整資料的流程。
+            function loadToForm(id, e) {
+                if (e) e.stopPropagation();
+                const item = history.find(h => h.id === id);
+                if (!item) return;
+
+                applyHistoryItem(item);
+                selectedHistoryIds.clear();
+                isHistoryCompareActive = false;
+                isHistorySingleView = false;
+                isIntersectionOnly = false;
                 syncUI();
                 const focusType = (data.addrLat !== null && data.addrLng !== null) ? "bounds" : "base";
                 updateMap(false, focusType);
@@ -2062,6 +2116,12 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
             function clearInput() {
                 document.getElementById("rawInput").value = "";
                 document.getElementById("rawInput").focus();
+                const hint = document.getElementById("pasteHint");
+                const batchNotice = document.getElementById("batchNotice");
+                const resultActions = document.getElementById("resultActions");
+                if (hint) hint.classList.add("hidden");
+                if (batchNotice) batchNotice.classList.add("hidden");
+                if (resultActions) resultActions.classList.add("hidden");
             }
 
             function addHistory() {
@@ -2375,8 +2435,10 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 locateMe,
                 toggleHistorySelect,
                 selectAllHistory,
+                startHistoryComparison,
                 clearHistorySelection,
                 loadToForm,
+                viewHistoryItem,
                 focusIntersection,
                 toggleShowIntersectionOnly,
                 clipPolygon,
