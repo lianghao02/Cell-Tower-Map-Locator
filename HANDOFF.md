@@ -3,7 +3,7 @@
 ## 核心元資料 (Metadata)
 - **Repository**：02_Cell-Tower-Map-Locator
 - **Branch**：main
-- **Commit SHA**：4845e69
+- **Commit SHA**：f364f92
 - **Skill Version**：v1.0.0
 - **Task Type**：FIX
 - **Local Path Hint**：`02_Cell-Tower-Map-Locator`
@@ -11,7 +11,7 @@
 ---
 
 ## 目前狀態
-可交付（中華電信調閱回覆切段與同基地台多 Cell 解析已修復完成，QA 驗證通過，已 Commit 本機 `main` 分支）
+已發布（中華電信即時定位解析修復與高 DPI 地圖清晰度改善已驗證通過，並正式推送至 `origin/main` 部署）
 
 ---
 
@@ -116,23 +116,16 @@
 ---
 
 ## Git 狀態
-- Commit：`4845e69`（程式碼修復 Commit）
-- Push：否（本地 main 分支已 Commit，尚未 push 至 origin/main）
-- Working Tree：更新 `HANDOFF.md` 待提交
+- Commit：`f364f92`（`fix: support Chunghwa location records and improve mobile map clarity`）
+- Push：是（已成功推送至 `origin/main`）
+- Working Tree：Clean
 - Branch：`main`
 
 ---
 
 ## 下一步建議動作 (Next Recommended Action)
-1. Codex 接手後執行 `git log -n 3 --oneline` 確認 `4845e69`。
-2. 將本 `HANDOFF.md` 提交，並視需求推送至 `origin/main`：
-   ```powershell
-   git add HANDOFF.md
-   git commit -m "docs: 更新交接文件 HANDOFF.md 供 Codex 接手"
-   # 若確認要推送到遠端：
-   # git push origin main
-   ```
-3. 開始評估或實作 v3.3.0 基地台飄移與跳訊智慧研判機制。
+1. 在 iPhone / 手機實機開啟線上正式版（https://lianghao02.github.io/Cell-Tower-Map-Locator/）確認底圖文字清晰度與操作手感。
+2. 規劃並啟動 v3.3.0 基地台飄移與跳訊智慧研判機制。
 
 ---
 
