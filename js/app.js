@@ -301,14 +301,14 @@
 
             // 判斷是否為通訊調閱入口網站的完整定位回覆，避免一般座標文字誤入專用解析流程
             function isPortalResponse(text) {
-                const portalRecordPattern = /^\s*\|?\s*\d+\s*\|?\s*即時定位\s*\|?\s*(?:定位完成|無法定位)(?=\s|\|)/m;
+                const portalRecordPattern = /^\s*\|?\s*\d+\s*\|?\s*(?:\r?\n\s*)?(?:即時定位\s*(?:\||\r?\n)?\s*)?(?:定位完成|定位成功|無法定位)(?=\s|\||$)/m;
                 const hasCompleteResponse = /回覆資訊[：:]/.test(text) &&
                     /定位記錄[：:]/.test(text) &&
                     /序號\s+定位類別\s+定位狀態/.test(text) &&
                     portalRecordPattern.test(text);
                 const hasPortalRecords = portalRecordPattern.test(text);
-                const hasBaseStationSection = /基地[臺台](?:經緯度|座標|位置)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text);
-                const hasLocatorMetadata = /(?:定位請求|註冊基地|定位基地[臺台]方向角|Positioning Request|Base Station Reg|detected\s+at)/i.test(text);
+                const hasBaseStationSection = /基地[臺台](?:資訊|經緯度|座標|位置)|細胞(?:資訊|經緯度|座標|經度)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text);
+                const hasLocatorMetadata = /(?:定位請求|註冊基地|最後註冊|定位基地[臺台]方向角|Positioning Request|Base Station Reg|detected\s+at)/i.test(text);
                 const hasAzimuth = /(?:定位基地[臺台]方向角|基地[臺台](?:方向角|方位角)|天線方位角|Azimuth|Bearing|Dir)/i.test(text);
                 // 單筆來源未必包含「定位完成」，但同時具備基地台段落與定位欄位時可安全視為同一筆。
                 const hasSingleRecordFragment = hasBaseStationSection && (hasLocatorMetadata || hasAzimuth);
@@ -343,17 +343,33 @@
             // 從指定標題區段擷取經緯度，避免基地臺與 GMLC 座標互相混用
             function parsePortalCoordinateSection(block, sectionPattern, endPattern) {
                 const sectionMatch = block.match(new RegExp(
-                    `(?:${sectionPattern})\\s*([\\s\\S]*?)(?=${endPattern}|$)`,
+                    `(?:${sectionPattern})[：:\\s]*([\\s\\S]*?)(?=${endPattern}|$)`,
                     "i"
                 ));
                 if (!sectionMatch) return null;
+                const targetText = sectionMatch[0];
 
-                const lngMatch = sectionMatch[1].match(/(?:經度|Longitude|Lng)\s*[：:]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
-                const latMatch = sectionMatch[1].match(/(?:緯度|Latitude|Lat)\s*[：:]?\s*(-?\d{1,2}(?:\.\d+)?)/i);
-                if (!latMatch || !lngMatch) return null;
+                let lat = null, lng = null;
 
-                const lat = parseFloat(latMatch[1]);
-                const lng = parseFloat(lngMatch[1]);
+                // 模式 1: 關鍵字分別搜尋 (支援細胞經緯度/經緯度/Lat/Lng)
+                const lngMatch = targetText.match(/(?:細胞經度|經度|Longitude|Lng)\s*[：:]?\s*(-?\d{1,3}(?:\.\d+)?)/i);
+                const latMatch = targetText.match(/(?:細胞緯度|緯度|Latitude|Lat)\s*[：:]?\s*(-?\d{1,2}(?:\.\d+)?)/i);
+                if (latMatch && lngMatch) {
+                    lat = parseFloat(latMatch[1]);
+                    lng = parseFloat(lngMatch[1]);
+                } else {
+                    // 模式 2: 成對座標 (例如: 基地臺經緯度: 25.033, 121.565)
+                    const pairMatch = targetText.match(/(2[1-7]\.[0-9]+)[^0-9\.]+(1(?:1[8-9]|2[0-4])\.[0-9]+)/) ||
+                                      targetText.match(/(1(?:1[8-9]|2[0-4])\.[0-9]+)[^0-9\.]+(2[1-7]\.[0-9]+)/);
+                    if (pairMatch) {
+                        const v1 = parseFloat(pairMatch[1]);
+                        const v2 = parseFloat(pairMatch[2]);
+                        lat = v1 < 100 ? v1 : v2;
+                        lng = v1 < 100 ? v2 : v1;
+                    }
+                }
+
+                if (lat === null || lng === null) return null;
                 if (lat < config.boundsLatMin || lat > config.boundsLatMax ||
                     lng < config.boundsLngMin || lng > config.boundsLngMax) {
                     return null;
@@ -364,10 +380,10 @@
             // 解析入口網站回覆；輸出沿用既有 towers 結構，降低對地圖與歷史功能的影響
             function parsePortalResponse(text, fallbackPhone) {
                 let recordStarts = [...text.matchAll(
-                    /^\s*\|?\s*(\d+)\s*\|?\s*即時定位\s*\|?\s*(定位完成|無法定位)(?=\s|\|)/gm
+                    /^\s*\|?\s*(\d+)\s*\|?\s*(?:\r?\n\s*)?(?:即時定位\s*(?:\||\r?\n)?\s*)?(定位完成|定位成功|無法定位)(?=\s|\||$)/gm
                 )];
                 if (recordStarts.length === 0) {
-                    const statusMatch = text.match(/(?:即時定位\s+)?(定位完成|無法定位)/);
+                    const statusMatch = text.match(/(?:即時定位\s+)?(定位完成|定位成功|無法定位)/);
                     if (statusMatch) {
                         recordStarts = [{ index: 0, 1: "1", 2: statusMatch[1] }];
                     } else {
@@ -381,7 +397,7 @@
                                 1: String(index + 1),
                                 2: "定位完成"
                             }));
-                        } else if (/基地[臺台](?:經緯度|座標|位置)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text)) {
+                        } else if (/基地[臺台](?:資訊|經緯度|座標|位置)|細胞(?:資訊|經緯度|座標|經度)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text)) {
                             recordStarts = [{ index: 0, 1: "1", 2: "定位完成" }];
                         }
                     }
@@ -400,17 +416,21 @@
                     const end = index + 1 < recordStarts.length ? recordStarts[index + 1].index : text.length;
                     const block = text.slice(start.index, end);
                     const statusText = start[2];
-                    if (statusText === "定位完成") completedCount += 1;
+                    const isSuccess = statusText === "定位完成" || statusText === "定位成功";
+                    if (isSuccess) completedCount += 1;
                     else failedCount += 1;
 
                     const reqMatch = block.match(/(?:定位請求的時間|定位請求時間|請求定位時間|Positioning Request|detected\s+at)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/i);
+                    const respMatch = block.match(/(?:定位回應的時間|定位回應時間|回應定位時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
                     const regMatch = block.match(/(?:註冊基地[臺台]時間|最後註冊時間|基地[臺台]註冊時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
-                    const cellMatch = block.match(/(?:註冊基地[臺台]編號|基地[臺台]編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
+                    const towerIdMatch = block.match(/(?:基地[臺台]編號|註冊基地[臺台]編號|Tower[- ]?ID)\s*[：:]?\s*([A-Za-z0-9_-]+)/i);
+                    const cellMatch = block.match(/(?:細胞編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
+                    const addrMatch = block.match(/(?:細胞地址|基地[臺台]地址|門牌地址|地址)\s*[：:]?\s*([^\r\n]+)/);
                     const azMatch = block.match(/(?:定位基地[臺台]方向角|基地[臺台](?:方向角|方位角)|天線方位角|Azimuth|Bearing|Dir)\s*[：:]?\s*(-?\d+(?:\.\d+)?)/i);
-                    const phoneMatch = block.match(/行動電話號碼\s*[：:]?\s*(8869\d{8}|09\d{8})/);
+                    const phoneMatch = block.match(/(?:行動電話號碼|行動電話|門號)\s*[：:]?\s*(8869\d{8}|09\d{8})/);
                     const tower = parsePortalCoordinateSection(
                         block,
-                        "基地[臺台](?:經緯度|座標|位置)|Base\\s*Station\\s*(?:Coordinates?|Location)",
+                        "基地[臺台](?:資訊|經緯度|座標|位置)|細胞(?:資訊|經緯度|座標|經度)|Base\\s*Station\\s*(?:Coordinates?|Location)",
                         "三角定位\\s*[（(]?GMLC[）)]?經緯度|行動電話號碼"
                     );
                     const gmlc = parsePortalCoordinateSection(
@@ -420,7 +440,7 @@
                     );
 
                     // 無法定位或缺少有效基地臺座標的紀錄保留於統計，但不送入既有地圖繪製
-                    if (statusText !== "定位完成") return;
+                    if (!isSuccess) return;
                     if (!tower) {
                         missingTowerCount += 1;
                         return;
@@ -436,10 +456,13 @@
                         azi: isValidAzimuth(rawAzimuth) ? rawAzimuth : null,
                         phone: normalizePhone(phoneMatch ? phoneMatch[1] : globalPhone),
                         reqTime: reqMatch ? reqMatch[1].replace(/-/g, "/") : "",
+                        responseTime: respMatch ? respMatch[1].replace(/-/g, "/") : "",
                         regTime: regMatch ? regMatch[1].replace(/-/g, "/") : "",
                         sequence: parseInt(start[1], 10),
+                        towerId: towerIdMatch ? towerIdMatch[1] : "",
                         cellId: cellMatch ? cellMatch[1] : "",
-                        status: "定位完成",
+                        address: addrMatch ? addrMatch[1].trim() : "",
+                        status: statusText,
                         gmlcLat: gmlc ? gmlc.lat : null,
                         gmlcLng: gmlc ? gmlc.lng : null
                     });
@@ -481,7 +504,7 @@
                 const portalResult = isPortalResponse(text) ? parsePortalResponse(text, globalPhone) : null;
                 let rawBlocks = portalResult ? [] : text.split(/\n\s*\n+/);
                 if (!portalResult && rawBlocks.length <= 1) {
-                    rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g);
+                    rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|基地[臺台]資訊|基地[臺台]編號))/g);
                 }
                 if (!portalResult && rawBlocks.length <= 1) {
                     rawBlocks = text.split('\n');
@@ -549,7 +572,8 @@
                             const isDup = parsedList.some(item =>
                                 Math.abs(item.lat - c.lat) < 0.00001 &&
                                 Math.abs(item.lng - c.lng) < 0.00001 &&
-                                item.reqTime === reqTime
+                                item.reqTime === reqTime &&
+                                item.azi === azi
                             );
 
                             if (!isDup) {
@@ -652,6 +676,10 @@
                 data.phone = finalTowers[0].phone;
                 data.reqTime = finalTowers[0].reqTime;
                 data.regTime = finalTowers[0].regTime;
+                data.responseTime = finalTowers[0].responseTime || "";
+                data.towerId = finalTowers[0].towerId || "";
+                data.cellId = finalTowers[0].cellId || "";
+                data.address = finalTowers[0].address || "";
                 selectedHistoryIds.clear();
                 isHistoryCompareActive = false;
                 isHistorySingleView = false;
@@ -1101,6 +1129,8 @@
                         if (t.phone) popupText += `<br>門號: ${esc(t.phone)}`;
                         if (t.reqTime) popupText += `<br>🕒 請求: ${esc(t.reqTime)}`;
                         if (t.regTime) popupText += `<br>📡 註冊: ${esc(t.regTime)}`;
+                        if (t.towerId || t.cellId) popupText += `<br>🏢 基地台: ${esc(t.towerId || "-")}${t.cellId ? ` / Cell: ${esc(t.cellId)}` : ""}`;
+                        if (t.address) popupText += `<br>📍 地址: ${esc(t.address)}`;
                         if (t.azi !== null && t.azi !== undefined && !isNaN(t.azi)) popupText += `<br>🧭 方位: ${esc(t.azi)}°`;
 
                         let m;
@@ -1999,12 +2029,17 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     phone: item.phone,
                     reqTime: item.reqTime,
                     regTime: item.regTime,
+                    responseTime: item.responseTime || "",
+                    towerId: item.towerId || "",
+                    cellId: item.cellId || "",
+                    address: item.address || "",
                     addrLat: item.addrLat !== undefined ? item.addrLat : null,
                     addrLng: item.addrLng !== undefined ? item.addrLng : null,
                     addrName: item.addrName !== undefined ? item.addrName : "",
                     searchQuery: item.searchQuery !== undefined ? item.searchQuery : "",
                     towers: Array.isArray(item.towers) && item.towers.length > 0 ? item.towers.map(tower => ({ ...tower })) : [{
-                        lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime
+                        lat: item.lat, lng: item.lng, azi: item.azi, phone: item.phone, reqTime: item.reqTime, regTime: item.regTime,
+                        towerId: item.towerId || "", cellId: item.cellId || "", address: item.address || "", responseTime: item.responseTime || ""
                     }],
                 };
                 currentHistoryId = item.id;
