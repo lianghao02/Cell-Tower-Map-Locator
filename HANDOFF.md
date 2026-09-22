@@ -39,6 +39,11 @@
 - **高 DPI / iPhone 地圖底圖清晰度改善 (`js/app.js`)**：
   - 為 OpenStreetMap、臺灣通用電子地圖 (NLSC) 與高解析衛星空照圖 (Esri) 全面啟用 `detectRetina: true`。
   - 精確設定 `maxNativeZoom`（OSM: 19, NLSC: 19, Esri: 18），確保在 2x/3x Retina 螢幕上以 1:1 實體像素顯示銳利路名文字，且縮放至最高層級時絕不觸發不存在圖磚的 404 錯誤。
+- **地圖最大 Zoom 上限對齊 (`js/app.js`)**：
+  - 將 Leaflet `L.map("map", { maxZoom: 20 })` 統一最大縮放為 20（解決原設定 22 導致極限放大時底圖消失空白問題）。
+  - 將 Esri 衛星底圖 `maxZoom` 設為 20（`maxNativeZoom: 18`），在 Zoom 19~20 藉由 overzoom 穩定渲染。
+  - 確認 OSM、NLSC、Esri 三大圖層於 Zoom 20 均可穩定顯示，且桌機滾輪與手機雙指放大無法再突破至無圖磚的 Zoom 21/22。
+  - 全文檢驗無任何 `setView` 或 `setZoom` 硬編碼超過 20。
 - **手機端抽屜轉場地圖尺寸自適應 (`js/app.js`)**：
   - 監聽 `floating-console` 的 `transitionend` 事件並實施 50ms 防抖，在抽屜展開、收合或高度動畫結束時精確觸發 `map.invalidateSize()`，徹底消除地圖邊緣黑邊或白塊。
 - **切段正則修復 (`js/app.js`)**：

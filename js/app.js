@@ -1076,7 +1076,7 @@
                         centerLng = data.lng;
                         defaultZoom = config.defaultZoom;
                     }
-                    map = L.map("map", { maxZoom: 22 }).setView([centerLat, centerLng], defaultZoom);
+                    map = L.map("map", { maxZoom: 20 }).setView([centerLat, centerLng], defaultZoom);
                     const osmLayer = L.tileLayer(config.mapTileUrl, {
                         maxZoom: 20,
                         maxNativeZoom: 19,
@@ -1101,7 +1101,7 @@
                     });
 
                     const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-                        maxZoom: 19,
+                        maxZoom: 20,
                         maxNativeZoom: 18,
                         detectRetina: true,
                         attribution: '&copy; Esri'
