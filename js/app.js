@@ -137,6 +137,15 @@
                     if (consoleEl && typeof L !== "undefined" && L.DomEvent) {
                         L.DomEvent.disableScrollPropagation(consoleEl);
                         L.DomEvent.disableClickPropagation(consoleEl);
+                        let resizeDebounce = null;
+                        consoleEl.addEventListener("transitionend", (e) => {
+                            if (e.propertyName === "max-height" || e.propertyName === "transform" || e.propertyName === "padding") {
+                                if (resizeDebounce) clearTimeout(resizeDebounce);
+                                resizeDebounce = setTimeout(() => {
+                                    if (map) map.invalidateSize();
+                                }, 50);
+                            }
+                        });
                     }
                     const myLocBtn = document.getElementById("btnMyLocation");
                     if (myLocBtn && typeof L !== "undefined" && L.DomEvent) {
@@ -380,7 +389,7 @@
             // 解析入口網站回覆；輸出沿用既有 towers 結構，降低對地圖與歷史功能的影響
             function parsePortalResponse(text, fallbackPhone) {
                 let recordStarts = [...text.matchAll(
-                    /^\s*\|?\s*(\d+)\s*\|?\s*(?:\r?\n\s*)?(?:即時定位\s*(?:\||\r?\n)?\s*)?(定位完成|定位成功|無法定位)(?=\s|\||$)/gm
+                    /^\s*(?:\|?\s*(\d+)\s*\|?\s*(?:\r?\n\s*)?)?(?:即時定位\s*(?:\||\r?\n)?\s*)?(定位完成|定位成功|無法定位)(?=\s|\||$)/gm
                 )];
                 if (recordStarts.length === 0) {
                     const statusMatch = text.match(/(?:即時定位\s+)?(定位完成|定位成功|無法定位)/);
@@ -397,8 +406,17 @@
                                 1: String(index + 1),
                                 2: "定位完成"
                             }));
-                        } else if (/基地[臺台](?:資訊|經緯度|座標|位置)|細胞(?:資訊|經緯度|座標|經度)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text)) {
-                            recordStarts = [{ index: 0, 1: "1", 2: "定位完成" }];
+                        } else {
+                            const towerStarts = [...text.matchAll(/(?:基地[臺台]資訊|基地[臺台]編號|細胞經度)/g)];
+                            if (towerStarts.length > 1) {
+                                recordStarts = towerStarts.map((match, index) => ({
+                                    index: match.index,
+                                    1: String(index + 1),
+                                    2: "定位完成"
+                                }));
+                            } else if (/基地[臺台](?:資訊|經緯度|座標|位置)|細胞(?:資訊|經緯度|座標|經度)|Base\s*Station\s*(?:Coordinates?|Location)/i.test(text)) {
+                                recordStarts = [{ index: 0, 1: "1", 2: "定位完成" }];
+                            }
                         }
                     }
                 }
@@ -458,7 +476,7 @@
                         reqTime: reqMatch ? reqMatch[1].replace(/-/g, "/") : "",
                         responseTime: respMatch ? respMatch[1].replace(/-/g, "/") : "",
                         regTime: regMatch ? regMatch[1].replace(/-/g, "/") : "",
-                        sequence: parseInt(start[1], 10),
+                        sequence: (start[1] && !isNaN(parseInt(start[1], 10))) ? parseInt(start[1], 10) : (index + 1),
                         towerId: towerIdMatch ? towerIdMatch[1] : "",
                         cellId: cellMatch ? cellMatch[1] : "",
                         address: addrMatch ? addrMatch[1].trim() : "",
@@ -468,8 +486,22 @@
                     });
                 });
 
+                // 去重保護：僅當座標、方位角、時間、基地台編號、細胞編號完全一致時才視為重複
+                const uniqueRecords = [];
+                records.forEach((r) => {
+                    const isDup = uniqueRecords.some(item =>
+                        Math.abs(item.lat - r.lat) < 0.00001 &&
+                        Math.abs(item.lng - r.lng) < 0.00001 &&
+                        item.azi === r.azi &&
+                        (item.reqTime || item.regTime) === (r.reqTime || r.regTime) &&
+                        ((!item.towerId && !r.towerId) || item.towerId === r.towerId) &&
+                        ((!item.cellId && !r.cellId) || item.cellId === r.cellId)
+                    );
+                    if (!isDup) uniqueRecords.push(r);
+                });
+
                 return {
-                    records,
+                    records: uniqueRecords,
                     declaredCount: declaredMatch ? parseInt(declaredMatch[1], 10) : recordStarts.length,
                     parsedCount: recordStarts.length,
                     completedCount,
@@ -537,7 +569,17 @@
                     const rawAzi = azM ? parseFloat(azM[1]) : null;
                     const azi = isValidAzimuth(rawAzi) ? rawAzi : null;
 
-                    // D. 抓經緯度 (支援全格式: DMS/DMM 與 DD 成對)
+                    // D. 抓基地臺編號、細胞編號、地址與回應時間
+                    const towerIdM = block.match(/(?:基地[臺台]編號|註冊基地[臺台]編號|Tower[- ]?ID)\s*[：:]?\s*([A-Za-z0-9_-]+)/i);
+                    const cellIdM = block.match(/(?:細胞編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
+                    const addrM = block.match(/(?:細胞地址|基地[臺台]地址|門牌地址|地址)\s*[：:]?\s*([^\r\n]+)/);
+                    const respM = block.match(/(?:定位回應的時間|定位回應時間|回應定位時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+                    const blockTowerId = towerIdM ? towerIdM[1] : "";
+                    const blockCellId = cellIdM ? cellIdM[1] : "";
+                    const blockAddr = addrM ? addrM[1].trim() : "";
+                    const blockRespTime = respM ? respM[1].replace(/-/g, "/") : "";
+
+                    // E. 抓經緯度 (支援全格式: DMS/DMM 與 DD 成對)
                     let foundCoords = parseDMSToDD(block);
 
                     if (foundCoords.length === 0) {
@@ -572,8 +614,10 @@
                             const isDup = parsedList.some(item =>
                                 Math.abs(item.lat - c.lat) < 0.00001 &&
                                 Math.abs(item.lng - c.lng) < 0.00001 &&
-                                item.reqTime === reqTime &&
-                                item.azi === azi
+                                (item.reqTime || item.regTime) === (reqTime || regTime) &&
+                                item.azi === azi &&
+                                ((!item.towerId && !blockTowerId) || item.towerId === blockTowerId) &&
+                                ((!item.cellId && !blockCellId) || item.cellId === blockCellId)
                             );
 
                             if (!isDup) {
@@ -583,7 +627,11 @@
                                     azi: azi,
                                     phone: blockPhone,
                                     reqTime: reqTime,
-                                    regTime: regTime
+                                    responseTime: blockRespTime,
+                                    regTime: regTime,
+                                    towerId: blockTowerId,
+                                    cellId: blockCellId,
+                                    address: blockAddr
                                 });
                             }
                         }
@@ -1032,6 +1080,7 @@
                     const osmLayer = L.tileLayer(config.mapTileUrl, {
                         maxZoom: 20,
                         maxNativeZoom: 19,
+                        detectRetina: true,
                         subdomains: 'abc',
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     });
@@ -1047,11 +1096,14 @@
                     const nlscLayer = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}", {
                         maxZoom: 20,
                         maxNativeZoom: 19,
+                        detectRetina: true,
                         attribution: '&copy; <a href="https://maps.nlsc.gov.tw">國土測繪圖資服務雲</a>'
                     });
 
                     const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
                         maxZoom: 19,
+                        maxNativeZoom: 18,
+                        detectRetina: true,
                         attribution: '&copy; Esri'
                     });
 
