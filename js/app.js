@@ -1076,9 +1076,9 @@
                         centerLng = data.lng;
                         defaultZoom = config.defaultZoom;
                     }
-                    map = L.map("map", { maxZoom: 20 }).setView([centerLat, centerLng], defaultZoom);
+                    map = L.map("map", { maxZoom: 19 }).setView([centerLat, centerLng], defaultZoom);
                     const osmLayer = L.tileLayer(config.mapTileUrl, {
-                        maxZoom: 20,
+                        maxZoom: 19,
                         maxNativeZoom: 19,
                         detectRetina: true,
                         subdomains: 'abc',
@@ -1094,14 +1094,14 @@
                     osmLayer.addTo(map);
 
                     const nlscLayer = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}", {
-                        maxZoom: 20,
+                        maxZoom: 19,
                         maxNativeZoom: 19,
                         detectRetina: true,
                         attribution: '&copy; <a href="https://maps.nlsc.gov.tw">國土測繪圖資服務雲</a>'
                     });
 
                     const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-                        maxZoom: 20,
+                        maxZoom: 18,
                         maxNativeZoom: 18,
                         detectRetina: true,
                         attribution: '&copy; Esri'
@@ -1113,6 +1113,15 @@
                         "🇹🇼 臺灣通用電子地圖 (國土測繪)": nlscLayer,
                         "🛰️ 高解析衛星空照圖": satLayer
                     }, null, { position: "topright" }).addTo(map);
+
+                    // 底圖切換時動態同步地圖最大縮放層級，各底圖達到自身原生上限即停止放大，避免全白
+                    map.on("baselayerchange", function (e) {
+                        const targetMax = (e.layer && e.layer.options && e.layer.options.maxZoom) ? e.layer.options.maxZoom : 19;
+                        map.setMaxZoom(targetMax);
+                        if (map.getZoom() > targetMax) {
+                            map.setZoom(targetMax);
+                        }
+                    });
 
                     map.on("click", (e) => {
                         if (!isMapSelectActive) return;
