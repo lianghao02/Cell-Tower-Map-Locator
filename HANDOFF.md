@@ -1,175 +1,125 @@
 # HANDOFF
 
+## 核心元資料 (Metadata)
+- **Repository**：02_Cell-Tower-Map-Locator
+- **Branch**：main
+- **Commit SHA**：4845e69
+- **Skill Version**：v1.0.0
+- **Task Type**：FIX
+- **Local Path Hint**：`02_Cell-Tower-Map-Locator`
+
+---
+
 ## 目前狀態
-可交付（單筆定位文字與手機優先操作流程已推送至 `origin/main`）
+可交付（中華電信調閱回覆切段與同基地台多 Cell 解析已修復完成，QA 驗證通過，已 Commit 本機 `main` 分支）
 
 ---
 
 ## 本輪目標
-1. 修復本機 `file:///` 環境圖磚 403 問題（OSM 官方阻擋 Referer=null）
-2. 新增三圖磚切換控制項（OpenStreetMap / 國土測繪 / 衛星空照）
-3. 修正行動瀏覽器 Clipboard API 被拒絕時的貼上退路
-4. 更新 README 與 CHANGELOG，準備發布 v3.2.2
-5. 支援不含「定位完成」欄位的單筆基地台／GMLC／方位角文字
-6. 手機預設單筆檢視；多筆交集比對改為明確啟動
+1. 解決中華電信調閱回覆資料（含即時定位目標明細、單筆細胞經緯度）之解析相容性問題。
+2. 根除「細胞緯度」將經緯度切斷導致單筆資料無法辨識座標之缺陷。
+3. 支援中華電信「同實體基地台但不同 Cell / 不同天線方位角」多筆紀錄並存，不被去重邏輯吞掉。
+4. 擴充資料模型以保留 `towerId`（基地臺編號）、`cellId`（細胞編號）、`address`（細胞地址）、`responseTime`（定位回應的時間），並於多點時間軸清單與地圖 Marker Popup 完整呈顯。
+5. 執行 QA 驗證與 regression 測試，整理完整 `HANDOFF.md` 供 Codex 無縫接軌。
 
 ---
 
-## 已完成
-
-### 圖磚修復（`js/app.js`）
-- **根因**：`tile.openstreetmap.org` 對 `Referer: null`（本機 file:// 協定）回傳 403 Access Blocked
-- **方案**：改用 `tile.openstreetmap.de`，實測本機顯示繁體中文地名，與 GitHub Pages 線上版一致
-- **遷移保護**：`loadConfig()` 內 `isOutdatedTile` 判斷，自動升級舊版 URL（`.org`、`cartocdn`、`.fr`）
-- **三圖層**：
-  - 🗺️ OpenStreetMap（繁體中文）→ `openstreetmap.de`（預設）
-  - 🇹🇼 臺灣通用電子地圖 → `wmts.nlsc.gov.tw`（NLSC 國土測繪）
-  - 🛰️ 高解析衛星空照圖 → Esri ArcGIS World Imagery
-- **雙層備援**：`osmLayer.on('tileerror')` 自動 fallback 至 NLSC
-
-### Google Maps 導航按鈕（`css/style.css`）
-- Leaflet popup 內 `.btn-nav-gmap` 強制純白字（`color: #ffffff !important`），解決按鈕可讀性問題
-
-### 手機版 Bottom Sheet（`css/style.css`、`js/app.js`）
-- `@media max-width: 768px` 底部抽屜收合/展開完整
-- GPS FAB 按鈕（`locateMe()`）於手機端正常運作，藍光脈衝動畫正確
-
-### 行動版貼上退路（`index.html`、`js/app.js`）
-- 「貼上／手動」按鈕保留 Clipboard API 可用時的一鍵貼上流程
-- API 不支援、權限被拒絕或剪貼簿為空時，改為聚焦輸入框並顯示長按貼上指引
-- 提示使用 `role="status"` 與 `aria-live="polite"`，避免只用彈出警示中斷操作
-
-### 單筆定位文字解析（`js/app.js`）
-- 單筆來源即使沒有「定位完成」，只要包含基地台段落及時間或方位角，便會將基地台、方位角與 GMLC 綁定為同一筆資料。
-- 支援 `基地台座標／位置`、`Base Station Coordinates／Location`、`Bearing`、`Latitude／Longitude` 與 `detected at` 等別名。
-- GMLC 固定獨立保存與標示為「業者定位參考點」；基地台座標只用於扇形覆蓋分析。
-
-### 手機優先歷史與結果操作（`index.html`、`js/app.js`）
-- 解析頁新增固定「調閱回覆原文」標籤，提示文字改為基地台、GMLC 與方位角。
-- Google Map、複製與分享按鈕在解析成功後才顯示；清空或重新解析時隱藏，避免首屏操作過多與分享舊結果。
-- 點擊歷史卡改為單筆檢視：清除比對選取、不繪製交集，也不自動繪製同批次軌跡線。
-- 勾選框只建立比對清單；選取兩筆以上後必須按「開始比對」才疊加扇形與計算交集。
-- 單筆解析摘要改為「基地台、GMLC、方位角皆可用」等判讀文字，取代重複的系統統計數字。
-
-### 版本歷程（本輪相關）
-| Commit | 說明 |
-|--------|------|
-| `f305e9e` | fix: 修復本機 file:/// 圖磚 403，改用 openstreetmap.de 繁中圖資並新增三圖磚切換控制項 |
-| `87c35e5` | fix: 提升基地台分析透明度與分享隱私 |
-| `60c372f` | fix: 發布 v3.2.1 定位與行動版修補 |
+## 基準與已確認事實 (Baseline & Confirmed Facts)
+1. **格式根因**：中華電信回傳資料之欄位排列為「細胞經度：... \n 細胞緯度：...」，原本 `rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g)` 中包含 `細胞緯度`，導致經緯度被腰斬拆成兩個獨立 Block，使經緯度配對失效報錯。
+2. **切段規則**：**絕對不能將 `細胞緯度` 放入切段正則**。
+3. **同基地台多 Cell 判定**：中華電信 18 筆調閱回覆中，常出現同一基地臺編號（例如 315932）但在不同時間點使用不同細胞編號（如 Cell 13 方位角 40°，Cell 31 方位角 330°）。原 Generic Parser 去重邏輯僅依據經緯度與請求時間判斷，若同時間或同座標未比對方位角，將誤吞有效 Cell 資料。現已在去重判斷中加入 `item.azi === azi`。
+4. **中華電信標頭相容**：中華電信調閱單序號常為 `1\n定位成功` 或直接為 `細胞經度：...`，已於 `isPortalResponse` 與 `parsePortalResponse` 全面納入支援。
 
 ---
 
-## 刻意未修改
-- `index.html`：HTML 結構未動，所有修改限於 `js/app.js` 與 `css/style.css`
+## 已完成 (Completed)
+- **切段正則修復 (`js/app.js`)**：
+  - 移除 `rawBlocks` 切段中的 `細胞緯度`，改為以 `基地[臺台]資訊|基地[臺台]編號` 作為區段開頭切分，徹底解決座標被拆半問題。
+- **Portal Parser 辨識擴充 (`js/app.js`)**：
+  - `isPortalResponse()` 與 `parsePortalResponse()` 支援 `定位成功` 關鍵字、換行序號格式（例如 `1\n定位成功`）與 `細胞資訊/細胞經度` 標頭。
+  - `parsePortalCoordinateSection()` 同步支援關鍵字分欄（`細胞經度/細胞緯度`）與成對座標（`25.xxx, 121.yyy`）。
+- **資料模型擴充與保留 (`js/app.js`)**：
+  - 完整擷取並保留 `towerId`（基地臺編號）、`cellId`（細胞編號）、`address`（細胞地址）、`responseTime`（定位回應時間）。
+  - 歷史紀錄儲存與還原 (`restoreFromHistory`) 完整帶入新欄位。
+- **去重邏輯保護 (`js/app.js`)**：
+  - 在 Generic Parser 去重邏輯中加入 `item.azi === azi`，確保同實體基地台但不同 Cell / 方位角之時序紀錄不被誤刪。
+- **UI 與地圖呈現強化 (`js/app.js`)**：
+  - 地圖 Marker Popup 與多點時間軸列表加入基地台編號、細胞編號與門牌地址顯示。
+- **版本號同步 (`index.html`)**：
+  - 標題版本由 `v3.2.1` 校正為 `v3.2.2`。
+- **QA 驗證 (`scripts/qa.ps1`)**：
+  - `node --check js/app.js` 通過。
+  - `git diff --check` 通過。
+  - Node.js VM 針對中華電信單筆、多筆（18 筆同基地台多 Cell）、遠傳調閱回覆 regression 實測皆 100% 通過。
 
 ---
 
-## 尚未完成
-
-### v3.3.0 規劃（用戶確認方向：即時查詢分析優先）
-用戶需求原話：「基地台可能會飄移，人沒動，但是基地台飄了」「我比較著重在當下的查詢分析」
-
-**建議 v3.3.0 核心功能**：
-1. **乒乓 / 飄移智慧研判模組**
-   - 多筆同一地點查詢的基地台一致性分析
-   - 偵測「座標沒變，但回傳基地台變了」的飄移事件
-   - 在分析結果列標示「穩定」、「飄移」、「切換」狀態
-2. **即時查詢分析強化**
-   - 同一地點多次查詢，自動比對基地台 ID 差異
-   - 飄移率統計（同位置 N 次查詢中幾次換台）
-3. **查詢快照**
-   - 保存本次查詢的精確時間戳與基地台快照
-   - 支援查看「這個地點在不同時段連到哪個台」
+## 異動檔案 (Changed Files)
+- `index.html`: 版本號標示同步 (v3.2.1 -> v3.2.2)
+- `js/app.js`: 中華電信切段修復、Portal 辨識擴充、資料欄位擴充與 Popup/歷史呈現
+- `HANDOFF.md`: 本交接文件
 
 ---
 
-## 驗證結果
+## 刻意未修改 (Do Not Do / Deliberately Omitted)
+- **未放寬 `maxBatchLimit = 5`**：維持目前最多選取 5 筆地圖繪製與交集上限，避免行動裝置效能過載；完整 18 筆紀錄能被 parser 完全解析。
+- **未順便啟動 v3.3.0 飄移演算法**：保留給後續專注設計，避免一次改動過大。
+- **不重寫框架**：維持標準原生 Vanilla JS + Leaflet DOM 操作，不引進外部相依性套件。
 
-### 已執行
-- `git status` → Working Tree Clean（`f305e9e`，`main` 分支）
-- `node --check js/app.js` → 語法無錯誤
-- 圖磚 URL 格式目視確認（`.de` 替換 `.org`，`subdomains: 'abc'`）
-- `loadConfig()` 遷移邏輯目視確認（三個舊 URL 模式對應升級）
-- `L.control.layers` 三圖層初始化目視確認
-- 以 Node VM 實際解析：純文字單筆、完整表格單筆、英文基地台文字，皆正確取得基地台座標、方位角與可用的 GMLC／時間欄位。
-- `node --check js/app.js`、`scripts\qa.ps1`、`git diff --check` 通過；並以靜態檢查確認結果操作預設隱藏、歷史單筆檢視與明確開始比對的必要節點存在。
+---
 
-### 尚未驗證
-- 瀏覽器實測：本機 `file:///index.html` 開啟後三圖磚實際顯示效果
-- 手機端圖層切換按鈕（右上角）是否被 FAB 遮擋
+## 尚未完成 (Remaining Work)
+- **P1 (阻斷/必須)**：無阻斷問題，核心功能已修復完成。
+- **P2 (重要/當次)**：
+  - Codex 接手後在實體瀏覽器確認中華電信資料解析並點擊地圖 Marker Popup 檢視新欄位（基地台 ID、Cell ID、門牌地址）。
+- **P3 (改善建議/暫緩 - v3.3.0 規劃)**：
+  - **乒乓 / 飄移智慧研判模組**：
+    - 多筆同一地點查詢的基地台一致性分析。
+    - 偵測「座標沒變，但回傳基地台變了」或「短時間內頻繁在不同基地台／細胞間切換」的飄移跳訊事件。
+    - 在分析結果列標示「穩定」、「飄移」、「切換」狀態。
+  - **即時查詢分析強化**：
+    - 飄移率統計（同位置 N 次查詢中幾次換台）。
+    - 查詢快照：保存時間戳與基地台快照。
 
-### 已知風險
-- NLSC `wmts.nlsc.gov.tw` 為政府 API，可能有流量限制或維護期斷線
-- `openstreetmap.de` 非官方但穩定，OSM 官方使用條款限制僅針對 `.org`
+---
+
+## 驗證結果 (Validation)
+### 已執行測試與結果
+- `git status` → 最新程式碼已 Commit 至本地 main 分支（Commit SHA: `4845e69`）。
+- `scripts/qa.ps1` → 通過（語法無誤，無尾隨空白）。
+- Node VM 實測：
+  1. 中華電信單筆截圖資料（細胞經緯度、地址、方位角 330°、最後註冊時間）成功解析。
+  2. 中華電信多筆資料（同基地台 315932、Cell 13/40° 與 Cell 31/330°）成功分別保留為獨立紀錄，無被誤吞。
+  3. 遠傳電信調閱回覆資料回歸測試成功。
+
+### 尚未驗證項目
+- 手機實機瀏覽器開啟 GitHub Pages 或本機 `file:///index.html` 測試中華電信實際貼上操作感受。
+
+### 已知風險 (Known Risks)
+- 調閱單文字若完全缺少換行與任何分隔符號，需依賴標頭正則切段。
 
 ---
 
 ## Git 狀態
-- Commit：`d485f2b`（手機優先單筆檢視與明確比對流程）
-- Push：是（`origin/main`）
-- Working Tree：Clean
+- Commit：`4845e69`（程式碼修復 Commit）
+- Push：否（本地 main 分支已 Commit，尚未 push 至 origin/main）
+- Working Tree：更新 `HANDOFF.md` 待提交
 - Branch：`main`
 
 ---
 
-## 專案結構速查
-
-```
-D:\Development\GitHub\02_Cell-Tower-Map-Locator\
-├── index.html          # 主頁 (588 行)
-├── js/
-│   └── app.js          # 主邏輯 (2359 行)，含所有業務邏輯
-├── css/
-│   └── style.css       # 樣式 (166 行)
-├── 啟動工具.bat         # 一鍵啟動
-├── scripts/
-│   └── qa.ps1          # QA 腳本：node --check + git diff --check
-├── CHANGELOG.md        # 版本紀錄（最新 v3.2.2）
-├── README.md           # 專案說明
-└── AGENTS.md           # 專案專屬規則邊界
-```
-
-### `js/app.js` 關鍵行號速查
-| 功能 | 行號 |
-|------|------|
-| `DEFAULT_CONFIG`（含 `mapTileUrl`）| 66–79 |
-| `isMobileLayout()` | 84 |
-| `loadConfig()`（含圖磚遷移邏輯）| 201–218 |
-| `updateMap()` 地圖初始化（三圖層 + control.layers）| 959–991 |
-| `updateSheetSummary()` 手機摘要列 | 1528 |
-| `toggleConsole()` | 1544 |
-| `locateMe()` GPS 定位 | 1580 |
-| `app.*` 對外暴露方法 | 2220+ |
-
-### `css/style.css` 關鍵區段
-| 功能 | 行號 |
-|------|------|
-| GPS 脈衝藍點動畫 | 1–45 |
-| 手機版 Bottom Sheet（@media max-width: 768px）| 46–130 |
-| Leaflet popup `.btn-nav-gmap` 高對比度 | 131–166 |
+## 下一步建議動作 (Next Recommended Action)
+1. Codex 接手後執行 `git log -n 3 --oneline` 確認 `4845e69`。
+2. 將本 `HANDOFF.md` 提交，並視需求推送至 `origin/main`：
+   ```powershell
+   git add HANDOFF.md
+   git commit -m "docs: 更新交接文件 HANDOFF.md 供 Codex 接手"
+   # 若確認要推送到遠端：
+   # git push origin main
+   ```
+3. 開始評估或實作 v3.3.0 基地台飄移與跳訊智慧研判機制。
 
 ---
 
-## 圖磚可用性備忘
-
-| 圖磚來源 | 本地 file:// | 繁中顯示 | 備註 |
-|----------|-------------|---------|------|
-| `tile.openstreetmap.org` | ❌ 403 | ✅ | OSM 官方阻擋本地請求 |
-| `basemaps.cartocdn.com` | ✅ | 混合 | 浮水印問題 |
-| `tile.openstreetmap.fr` | ✅ | ❌ 拼音 | 羅馬化地名 |
-| **`tile.openstreetmap.de`** | ✅ | ✅ | **目前選用** |
-| `wmts.nlsc.gov.tw` | ✅ | ✅ | 次選圖磚 + 備援 |
-| Esri World Imagery | ✅ | N/A 衛星 | 衛星空照 |
-
----
-
-## 下一步
-
-**Codex 接手建議執行順序**：
-
-1. `git log --oneline -5` 確認目前分支狀態
-2. `node --check js/app.js` 確認語法
-3. 使用實機手機驗證「貼上／手動」在 Clipboard API 被拒絕時是否能聚焦輸入框並顯示長按貼上指引
-4. 在瀏覽器開啟 `file:///D:/Development/GitHub/02_Cell-Tower-Map-Locator/index.html` 確認三圖磚切換與手機版控制項未重疊
-5. 開始 v3.3.0：乒乓／飄移智慧研判模組
+## 發布狀態 (Release Status)
+可交付
