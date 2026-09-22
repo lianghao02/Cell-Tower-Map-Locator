@@ -1080,7 +1080,6 @@
                     const osmLayer = L.tileLayer(config.mapTileUrl, {
                         maxZoom: 19,
                         maxNativeZoom: 19,
-                        detectRetina: true,
                         subdomains: 'abc',
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     });
@@ -1096,14 +1095,12 @@
                     const nlscLayer = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}", {
                         maxZoom: 19,
                         maxNativeZoom: 19,
-                        detectRetina: true,
                         attribution: '&copy; <a href="https://maps.nlsc.gov.tw">國土測繪圖資服務雲</a>'
                     });
 
                     const satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
                         maxZoom: 18,
                         maxNativeZoom: 18,
-                        detectRetina: true,
                         attribution: '&copy; Esri'
                     });
 

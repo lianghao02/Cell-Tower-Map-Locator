@@ -36,9 +36,9 @@
 ---
 
 ## 已完成 (Completed)
-- **高 DPI / iPhone 地圖底圖清晰度改善 (`js/app.js`)**：
-  - 為 OpenStreetMap、臺灣通用電子地圖 (NLSC) 與高解析衛星空照圖 (Esri) 全面啟用 `detectRetina: true`。
-  - 精確設定 `maxNativeZoom`（OSM: 19, NLSC: 19, Esri: 18），確保在 2x/3x Retina 螢幕上以 1:1 實體像素顯示銳利路名文字，且縮放至最高層級時絕不觸發不存在圖磚的 404 錯誤。
+- **圖磚原生尺寸還原與路名字體清晰化 (`js/app.js`)**：
+  - 移除標準 Web 圖磚的 `detectRetina: true` 設定，徹底根除因強制將 256x256 圖磚壓縮為 128px 所導致的路名字體微小（螞蟻字）及向伺服器請求不存在的 Zoom 20 導致 404 灰色缺磚破圖之缺陷。
+  - 底圖完全恢復為官方標準 256x256 原生比例，路名、建築標籤與門牌號碼清晰易讀，視覺效果與官方 OpenStreetMap 完全一致。
 - **底圖原生上限動態同步與全白防護 (`js/app.js`)**：
   - 各底圖嚴格設定自身真實原生上限：OSM (`maxZoom: 19, maxNativeZoom: 19`)、NLSC (`maxZoom: 19, maxNativeZoom: 19`)、Esri 衛星圖 (`maxZoom: 18, maxNativeZoom: 18`)。
   - 地圖初始化設為 `maxZoom: 19`，並監聽 `baselayerchange` 事件動態同步 `map.setMaxZoom(targetMax)`。
