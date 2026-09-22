@@ -3,7 +3,7 @@
 ## 核心元資料 (Metadata)
 - **Repository**：02_Cell-Tower-Map-Locator
 - **Branch**：main
-- **Commit SHA**：f364f92
+- **Commit SHA**：0ae21ce
 - **Skill Version**：v1.0.0
 - **Task Type**：FIX
 - **Local Path Hint**：`02_Cell-Tower-Map-Locator`
@@ -11,7 +11,7 @@
 ---
 
 ## 目前狀態
-已發布（中華電信即時定位解析修復與高 DPI 地圖清晰度改善已驗證通過，並正式推送至 `origin/main` 部署）
+已發布（中華電信即時定位相容、極限放大全白防護、圖磚原生尺寸字體清晰化全數實測通過，已正式推送至 `origin/main` 部署）
 
 ---
 
@@ -20,10 +20,11 @@
 2. 根除「細胞緯度」將經緯度切斷導致單筆資料無法辨識座標之缺陷。
 3. 支援中華電信「同實體基地台但不同 Cell / 不同天線方位角」多筆紀錄並存，不被去重邏輯吞掉。
 4. 擴充資料模型以保留 `towerId`（基地臺編號）、`cellId`（細胞編號）、`address`（細胞地址）、`responseTime`（定位回應的時間），並於多點時間軸清單與地圖 Marker Popup 完整呈顯。
-5. 改善 iPhone／高 DPI 手機上 Leaflet 地圖底圖文字偏模糊問題（三大圖層加入 `detectRetina: true` 並配置相容之 `maxNativeZoom`）。
-6. 手機端控制台抽屜 transition 結束後自動觸發 `map.invalidateSize()`，防範破圖與缺角。
-7. 頁尾版本字樣統一校正為 `v3.2.2`。
-8. 執行 QA 驗證與全套 regression 測試（Case 1~4、台哥大、遠傳、DMS/DMM、民國時間）。
+5. 根除地圖放大到極限（Zoom 20）時因圖磚伺服器無圖資回傳空圖導致畫面全白之問題，各底圖限制在各自真實上限（OSM 19、NLSC 19、Esri 18）並動態同步 `map.setMaxZoom()`。
+6. 根除 `detectRetina` 將 256px 圖磚硬壓縮至 128px 導致路名變螞蟻字以及 `zoomOffset++` 請求不存在的 Zoom 20 導致 404 灰色缺磚破圖之問題，恢復圖磚原生 256px 大字體。
+7. 手機端控制台抽屜 transition 結束後自動觸發 `map.invalidateSize()`，防範破圖與缺角。
+8. 頁尾版本字樣統一校正為 `v3.2.2`。
+9. 執行 QA 驗證、全套 regression 測試與 Playwright 實機極限縮放比對。
 
 ---
 
@@ -111,9 +112,12 @@
   7. DMS / DMM / DD 座標轉換：度分秒換算通過。
   8. 民國紀年時間解析：民國 115 年換算通過。
   9. 三大底圖（OSM、NLSC、Esri）在 zoom 16~19 HTTP 請求驗證：全部 HTTP 200 正常載入。
+  10. Playwright 實機極限放大測試（南化國中 23.045082, 120.480330）：OSM 在 Zoom 19 字體大且清晰銳利，無任何灰色 404 缺磚破圖，與官方 OpenStreetMap 網站視覺一致。
+  11. Playwright 實機全白防護測試（經國路 25.01435, 121.30652）：NLSC 放大至 19 即停止放大（`+` 號按鈕 disabled），街廓門牌清晰，絕不進入 Zoom 20，零全白。
+  12. Playwright 實機底圖切換聯動測試：切換衛星圖時由 Zoom 19 自動安全降至 Zoom 18，影像清晰覆蓋，零全白；再切回 NLSC 時自動放寬回 19。
 
 ### 尚未驗證項目
-- 真實 iPhone 實機開啟線上版進行手動點擊實測（已透過 DevTools 高 DPI 模擬驗證）。
+- 真實 iPhone 實機開啟線上版進行手動點擊實測（已透過 DevTools 高 DPI 與 Playwright 模擬驗證）。
 
 ### 已知風險 (Known Risks)
 - NLSC 為政府開放圖資服務，若遇伺服器維護時會由 OSM 雙層備援機制處理。
@@ -121,7 +125,7 @@
 ---
 
 ## Git 狀態
-- Commit：`f364f92`（`fix: support Chunghwa location records and improve mobile map clarity`）
+- Commit：`0ae21ce`（`fix: restore native tile dimensions for sharp and readable street labels`）
 - Push：是（已成功推送至 `origin/main`）
 - Working Tree：Clean
 - Branch：`main`
