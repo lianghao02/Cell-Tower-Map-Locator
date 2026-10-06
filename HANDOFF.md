@@ -1,11 +1,13 @@
+> 2026-10-05 環境修復交接：本輪僅修正 AGENTS.md 的共用 Skill 正式來源為 configs/skills，程式碼與既有環境不變。Working Tree 為 Modified，未 Commit／Push；下列發布與功能紀錄為承接的前輪成果。
+
 # HANDOFF
 
 ## 核心元資料 (Metadata)
 - **Repository**：02_Cell-Tower-Map-Locator
 - **Branch**：main
-- **Commit SHA**：0ae21ce
+- **Commit SHA**：0ae21ce（本輪提交前基準；最新提交以 Git 記錄為準）
 - **Skill Version**：v1.0.0
-- **Task Type**：FIX
+- **Task Type**：HANDOFF
 - **Local Path Hint**：`02_Cell-Tower-Map-Locator`
 
 ---
@@ -37,6 +39,10 @@
 ---
 
 ## 已完成 (Completed)
+2026-10-06 GitHub 同步交接：使用者已授權提交與推送前輪成果；本輪只提交已核對範圍。最新 Commit SHA、遠端同步與 CI 結果統一見控制中心 `docs/github-sync/RESULTS.md`，不將提交本身的 SHA 寫入同一份提交。
+
+2026-10-05 README 文件更新：補齊專案概念、開發原因、典型流程、已知 Bug／限制及回報方式，並依實際入口校正必要操作說明。本次沒有修改產品程式、環境或個人資料，未 Commit／Push；前輪成果與既有待辦繼承。文件檢核與逐案索引由控制中心 docs/readme-refresh/RESULTS.md 彙整，不代表本次重新驗收全部功能。
+
 - **圖磚原生尺寸還原與路名字體清晰化 (`js/app.js`)**：
   - 移除標準 Web 圖磚的 `detectRetina: true` 設定，徹底根除因強制將 256x256 圖磚壓縮為 128px 所導致的路名字體微小（螞蟻字）及向伺服器請求不存在的 Zoom 20 導致 404 灰色缺磚破圖之缺陷。
   - 底圖完全恢復為官方標準 256x256 原生比例，路名、建築標籤與門牌號碼清晰易讀，視覺效果與官方 OpenStreetMap 完全一致。
@@ -125,12 +131,10 @@
 ---
 
 ## Git 狀態
-- Commit：`0ae21ce`（`fix: restore native tile dimensions for sharp and readable street labels`）
-- Push：是（已成功推送至 `origin/main`）
-- Working Tree：Clean
-- Branch：`main`
-
----
+- Commit：上述 SHA 為提交前基準；最新 SHA 見 `git log -1` 與中央同步報告。
+- Push：實際推送及遠端核對結果見中央 `docs/github-sync/RESULTS.md`。
+- Working Tree：最終狀態見中央同步報告；不含被忽略的環境、成品與使用者資料。
+- Branch：main。
 
 ## 下一步建議動作 (Next Recommended Action)
 1. 在 iPhone / 手機實機開啟線上正式版（https://lianghao02.github.io/Cell-Tower-Map-Locator/）確認底圖文字清晰度與操作手感。
