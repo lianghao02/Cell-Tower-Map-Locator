@@ -2,6 +2,13 @@
 
 # HANDOFF
 
+## 2026-10-21 補解析回歸測試（Claude）
+- 新增 `tests/`（`harness.js`＋`parser.test.js`，28 項）與只含測試指令的 `package.json`；執行：`npm test`。`harness.js` 在 vm 沙盒載入 `js/app.js`，以萬用替身取代 DOM 與 Leaflet，並在「公開介面」前插入一行匯出內部函式（只在測試載入時，不改動正式檔）。
+- 以 8 種故意改壞（去重忽略細胞編號、扇形跨 360 度、民國年位移、座標範圍、門號格式、失敗紀錄被繪製等）驗證測試會失敗；補強兩個原本太弱的案例後 8/8 皆被抓到。
+- `scripts/qa.ps1` 加入測試步驟（有 Node.js 才執行）。
+- 全部是虛構資料；限制：只能鎖定已知格式，遇到沒見過的真實回覆格式仍需將遮蔽個資的樣本加進測試。
+- 本輪沒有修改 `js/app.js`、沒有升版；PWA 與測試皆尚未發布。
+
 ## 核心元資料 (Metadata)
 - **Repository**：02_Cell-Tower-Map-Locator
 - **Branch**：main

@@ -1,0 +1,8 @@
+{
+  "name": "cell-tower-map-locator",
+  "private": true,
+  "description": "僅供開發測試使用；執行與發布不需要 Node.js，也沒有任何相依套件。",
+  "scripts": {
+    "test": "node --test tests/parser.test.js"
+  }
+}

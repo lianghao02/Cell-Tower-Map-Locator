@@ -91,6 +91,9 @@
 # 語法正確性檢查
 node --check js/app.js
 
+# 執行解析與扇形交集回歸測試（Node.js 20 以上；全部使用虛構的合成資料，執行與發布本身不需要 Node.js）
+npm test
+
 # 專案格式與資安 QA 檢核
 powershell -ExecutionPolicy Bypass -File scripts\qa.ps1
 ```
