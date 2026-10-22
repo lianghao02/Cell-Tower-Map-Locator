@@ -1,171 +1,53 @@
-> 2026-10-05 環境修復交接：本輪僅修正 AGENTS.md 的共用 Skill 正式來源為 configs/skills，程式碼與既有環境不變。Working Tree 為 Modified，未 Commit／Push；下列發布與功能紀錄為承接的前輪成果。
-
 # HANDOFF
 
-## 2026-10-22 v3.2.3 發布：PWA、解析回歸測試與模組拆分（Claude）
-- **發布結果**：使用者授權後，`refactor/pure-modules` 以快轉合併回 `main`，提交 b6ae7be 並推送；annotated tag `v3.2.3` 與 GitHub Release 已建立。GitHub Pages 建置完成（built b6ae7be），正式站 `index.html`、`sw.js`、`js/app.js`、`js/geometry.js`、`js/parser.js` 與提交逐位元組一致（5/5），快取 `cell-tower-locator-v2`、頁尾 v3.2.3。
-- 正式網址真瀏覽器冒煙測試：載入順序 geometry → parser → app、解析正確、主控台零錯誤。`check_release_versions.py 02 --online`：0 矛盾。
-- 本版同時正式發版先前已完成但未升版的 PWA 支援與解析回歸測試。
-- 未驗證：手機實機的 PWA 更新（已安裝者會在下次開啟時換新快取）。
-- 下方為拆分過程的原記錄。
-
-### 拆分過程（原記錄）
-- 依「有條件、分批、先補測試再拆」原則，在獨立分支 `refactor/pure-modules` 分三步拆分，每步單獨提交、不夾帶功能修改：
-  1. `bdc790b` 測試載入器支援載入拆出的模組（行為不變）。
-  2. `0f9e9a9` 9 個幾何純函式 → `js/geometry.js`（逐字搬移，函式本體 9/9 與原檔一致）。
-  3. `2499aed` 5 個解析輔助純函式 → `js/parser.js`（逐字搬移，5/5 一致）。
-  4. `f01dc91` 需要座標界線的 3 個函式（`parseDMSToDD`、`parsePortalCoordinateSection`、`parsePortalResponse`）→ `js/parser.js`；原本讀閉包 `config` 改為選用參數 `cfg`，`app.js` 傳入當下 `config`；界線預設值只在 parser.js 定義。還原改動後 3/3 與原檔一致。
-- `app.js` 2,588 → 2,164 行；`parse()`（同時更新畫面）與 `esc`（畫面用）刻意留在 app.js。
-- `index.html` 載入順序 geometry → parser → app；`sw.js` 預快取加入兩檔並升為 `cell-tower-locator-v2`（已安裝的 PWA 更新後離線仍完整）。
-- 驗證：`npm test` 30/30（新增 2 項鎖住 cfg 覆寫與單一來源）、`scripts/qa.ps1` 通過；真實瀏覽器驗證幾何運算、虛構入口網站回覆端到端解析，以及「使用者儲存自訂界線後重新載入」會改變解析結果。
-- 未做：未合併回 `main`、未推送、未升版；建議合併後依原發布流程升版並在手機實機確認 PWA 更新。`AGENTS.md` 新增模組地圖。
-
-## 2026-10-21 補解析回歸測試（Claude）
-- 新增 `tests/`（`harness.js`＋`parser.test.js`，28 項）與只含測試指令的 `package.json`；執行：`npm test`。`harness.js` 在 vm 沙盒載入 `js/app.js`，以萬用替身取代 DOM 與 Leaflet，並在「公開介面」前插入一行匯出內部函式（只在測試載入時，不改動正式檔）。
-- 以 8 種故意改壞（去重忽略細胞編號、扇形跨 360 度、民國年位移、座標範圍、門號格式、失敗紀錄被繪製等）驗證測試會失敗；補強兩個原本太弱的案例後 8/8 皆被抓到。
-- `scripts/qa.ps1` 加入測試步驟（有 Node.js 才執行）。
-- 全部是虛構資料；限制：只能鎖定已知格式，遇到沒見過的真實回覆格式仍需將遮蔽個資的樣本加進測試。
-- 本輪沒有修改 `js/app.js`、沒有升版；PWA 與測試皆尚未發布。
-
 ## 核心元資料 (Metadata)
-- **Repository**：02_Cell-Tower-Map-Locator
+- **Repository**：lianghao02/Cell-Tower-Map-Locator
 - **Branch**：main
-- **Commit SHA**：0ae21ce（本輪提交前基準；最新提交以 Git 記錄為準）
+- **Commit SHA**：73e2eef4f9c7e6a976966dda694df7e272f0e5c6（本輪修改前基準；本輪尚未提交）
 - **Skill Version**：v1.0.0
-- **Task Type**：HANDOFF
-- **Local Path Hint**：`02_Cell-Tower-Map-Locator`
+- **Task Type**：FIX
+- **Local Path Hint**：02_Cell-Tower-Map-Locator
 
 ---
 
-## 目前狀態
-已發布（中華電信即時定位相容、極限放大全白防護、圖磚原生尺寸字體清晰化全數實測通過，已正式推送至 `origin/main` 部署）
-
----
+P26-10-22：使用者已授權提交與發布。此提交包含本輪已驗證的修正及 v3.2.4 版本更新。Tag、Release、部署與最終同步結果統一見控制中心 `docs/audit-release-20261022.md`，不得依提交前記錄重做修復。
 
 ## 本輪目標
-1. 解決中華電信調閱回覆資料（含即時定位目標明細、單筆細胞經緯度）之解析相容性問題。
-2. 根除「細胞緯度」將經緯度切斷導致單筆資料無法辨識座標之缺陷。
-3. 支援中華電信「同實體基地台但不同 Cell / 不同天線方位角」多筆紀錄並存，不被去重邏輯吞掉。
-4. 擴充資料模型以保留 `towerId`（基地臺編號）、`cellId`（細胞編號）、`address`（細胞地址）、`responseTime`（定位回應的時間），並於多點時間軸清單與地圖 Marker Popup 完整呈顯。
-5. 根除地圖放大到極限（Zoom 20）時因圖磚伺服器無圖資回傳空圖導致畫面全白之問題，各底圖限制在各自真實上限（OSM 19、NLSC 19、Esri 18）並動態同步 `map.setMaxZoom()`。
-6. 根除 `detectRetina` 將 256px 圖磚硬壓縮至 128px 導致路名變螞蟻字以及 `zoomOffset++` 請求不存在的 Zoom 20 導致 404 灰色缺磚破圖之問題，恢復圖磚原生 256px 大字體。
-7. 手機端控制台抽屜 transition 結束後自動觸發 `map.invalidateSize()`，防範破圖與缺角。
-8. 頁尾版本字樣統一校正為 `v3.2.2`。
-9. 執行 QA 驗證、全套 regression 測試與 Playwright 實機極限縮放比對。
-
----
+修正 Service Worker 啟用時刪除同來源其他專案快取。
 
 ## 基準與已確認事實 (Baseline & Confirmed Facts)
-1. **格式根因**：中華電信回傳資料之欄位排列為「細胞經度：... \n 細胞緯度：...」，原本 `rawBlocks = text.split(/(?=(?:行動電話號碼|定位請求|註冊基地|細胞經緯度|細胞緯度))/g)` 中包含 `細胞緯度`，導致經緯度被腰斬拆成兩個獨立 Block，使經緯度配對失效報錯。
-2. **切段規則**：**絕對不能將 `細胞緯度` 放入切段正則**。
-3. **同基地台多 Cell 判定**：中華電信 18 筆調閱回覆中，常出現同一基地臺編號（例如 315932）但在不同時間點使用不同細胞編號（如 Cell 13 方位角 40°，Cell 31 方位角 330°）。原 Generic Parser 去重邏輯僅依據經緯度與請求時間判斷，若同時間或同座標未比對方位角，將誤吞有效 Cell 資料。現已在去重判斷中加入 `item.azi === azi`。
-4. **中華電信標頭相容**：中華電信調閱單序號常為 `1\n定位成功` 或直接為 `細胞經度：...`，已於 `isPortalResponse` 與 `parsePortalResponse` 全面納入支援。
-
----
+起始為上述分支／SHA，工作目錄乾淨。只修改本輪已重現問題；19 排除。
 
 ## 已完成 (Completed)
-2026-10-06 GitHub 同步交接：使用者已授權提交與推送前輪成果；本輪只提交已核對範圍。最新 Commit SHA、遠端同步與 CI 結果統一見控制中心 `docs/github-sync/RESULTS.md`，不將提交本身的 SHA 寫入同一份提交。
-
-2026-10-05 README 文件更新：補齊專案概念、開發原因、典型流程、已知 Bug／限制及回報方式，並依實際入口校正必要操作說明。本次沒有修改產品程式、環境或個人資料，未 Commit／Push；前輪成果與既有待辦繼承。文件檢核與逐案索引由控制中心 docs/readme-refresh/RESULTS.md 彙整，不代表本次重新驗收全部功能。
-
-- **圖磚原生尺寸還原與路名字體清晰化 (`js/app.js`)**：
-  - 移除標準 Web 圖磚的 `detectRetina: true` 設定，徹底根除因強制將 256x256 圖磚壓縮為 128px 所導致的路名字體微小（螞蟻字）及向伺服器請求不存在的 Zoom 20 導致 404 灰色缺磚破圖之缺陷。
-  - 底圖完全恢復為官方標準 256x256 原生比例，路名、建築標籤與門牌號碼清晰易讀，視覺效果與官方 OpenStreetMap 完全一致。
-- **底圖原生上限動態同步與全白防護 (`js/app.js`)**：
-  - 各底圖嚴格設定自身真實原生上限：OSM (`maxZoom: 19, maxNativeZoom: 19`)、NLSC (`maxZoom: 19, maxNativeZoom: 19`)、Esri 衛星圖 (`maxZoom: 18, maxNativeZoom: 18`)。
-  - 地圖初始化設為 `maxZoom: 19`，並監聽 `baselayerchange` 事件動態同步 `map.setMaxZoom(targetMax)`。
-  - 當切換到底圖時自動對齊該底圖上限（若當前 Zoom 高於新底圖上限則自動縮回），放大到各自極限時按鈕 disabled 且滾輪手勢停止，徹底根除 Zoom 20 官方無圖資回傳空圖導致畫面全白之缺陷。
-  - 全文檢驗無任何 `setView` 或 `setZoom` 硬編碼超過各圖層上限。
-- **手機端抽屜轉場地圖尺寸自適應 (`js/app.js`)**：
-  - 監聽 `floating-console` 的 `transitionend` 事件並實施 50ms 防抖，在抽屜展開、收合或高度動畫結束時精確觸發 `map.invalidateSize()`，徹底消除地圖邊緣黑邊或白塊。
-- **切段正則修復 (`js/app.js`)**：
-  - 移除 `rawBlocks` 切段中的 `細胞緯度`，改為以 `基地[臺台]資訊|基地[臺台]編號` 作為區段開頭切分，徹底解決座標被拆半問題。
-- **Portal Parser 辨識擴充 (`js/app.js`)**：
-  - `isPortalResponse()` 與 `parsePortalResponse()` 支援 `定位成功` 關鍵字、換行序號格式（例如 `1\n定位成功`）與 `細胞資訊/細胞經度` 標頭；並支援無序號的多筆定位回覆。
-  - `parsePortalCoordinateSection()` 同步支援關鍵字分欄（`細胞經度/細胞緯度`）與成對座標（`25.xxx, 121.yyy`）。
-- **資料模型擴充與保留 (`js/app.js`)**：
-  - 完整擷取並保留 `towerId`（基地臺編號）、`cellId`（細胞編號）、`address`（細胞地址）、`responseTime`（定位回應時間）。
-  - Generic Parser 與 Portal Parser 統一資料模型；歷史紀錄儲存與還原 (`restoreFromHistory`) 完整帶入新欄位。
-- **去重邏輯保護 (`js/app.js`)**：
-  - 嚴密比對 `lat, lng, azi, reqTime/regTime, towerId, cellId`，確保同實體基地台但不同 Cell（如 Cell 13 vs Cell 31 vs Cell 33）與不同時間之時序紀錄全部完整保留。
-- **UI 與地圖呈現強化 (`js/app.js`)**：
-  - 地圖 Marker Popup 與多點時間軸列表加入基地台編號、細胞編號與門牌地址顯示。
-- **版本號同步 (`index.html`)**：
-  - 標題版本由 `v3.2.1` 校正為 `v3.2.2`；頁尾版權標示由 `System Version 3.0` 更新為 `System Version 3.2.2`，全站版本完全對齊。
-- **QA 與回歸測試 (`scripts/qa.ps1`)**：
-  - `node --check js/app.js` 通過。
-  - `git diff --check` 通過。
-  - Case 1（單筆中華電信）、Case 2（同基地台多 Cell）、Case 3（三大基地台）、Case 4（完整 18 筆排版與 maxBatchLimit）、台哥大、遠傳、DMS/DMM、民國時間全部 100% 通過。
-
----
+activate 只刪除符合本專案 CACHE_PREFIX 且不是目前 CACHE_NAME 的舊快取；保留其他專案與目前版本。新增以實際 Service Worker activate 處理器執行的回歸案例，並納入 npm test。
 
 ## 異動檔案 (Changed Files)
-- `index.html`: 頂部與頁尾版本號標示同步 (v3.2.2)
-- `js/app.js`: 中華電信切段與無序號相容、嚴格去重保護、三大底圖 detectRetina、抽屜 transitionend 重繪
-- `CHANGELOG.md`: 記錄 v3.2.2 中華電信相容性修復與高 DPI 地圖清晰度改善
-- `HANDOFF.md`: 本交接文件
-
----
+sw.js、tests/service-worker.test.*、HANDOFF.md、package.json。
 
 ## 刻意未修改 (Do Not Do / Deliberately Omitted)
-- **未放寬 `maxBatchLimit = 5`**：維持目前最多選取 5 筆地圖繪製與交集上限，避免行動裝置效能過載；完整 18 筆紀錄能被 parser 完全解析。
-- **未順便啟動 v3.3.0 飄移演算法**：保留給後續專注設計，避免一次改動過大。
-- **不重寫框架**：維持標準原生 Vanilla JS + Leaflet DOM 操作，不引進外部相依性套件。
-
----
+未修改使用者原始資料、全域規則、其他工作階段成果或既有發布包。依本輪授權提交與部署。
 
 ## 尚未完成 (Remaining Work)
-- **P1 (阻斷/必須)**：無阻斷問題，核心功能已修復完成。
-- **P2 (重要/當次)**：無。
-- **P3 (改善建議/暫緩 - v3.3.0 規劃)**：
-  - **乒乓 / 飄移智慧研判模組**：
-    - 多筆同一地點查詢的基地台一致性分析。
-    - 偵測「座標沒變，但回傳基地台變了」或「短時間內頻繁在不同基地台／細胞間切換」的飄移跳訊事件。
-    - 在分析結果列標示「穩定」、「飄移」、「切換」狀態。
-  - **即時查詢分析強化**：
-    - 飄移率統計（同位置 N 次查詢中幾次換台）。
-    - 查詢快照：保存時間戳與基地台快照。
-
----
+- **P1 (阻斷/必須)**：本機修正無已知阻斷。
+- **P2 (重要/當次)**：發布前依下列限制補必要實測；本輪尚未部署。
+- **P3 (改善建議/暫緩)**：本機修正尚未部署；真實手機已安裝 PWA 的更新／離線驗收仍待執行。
 
 ## 驗證結果 (Validation)
 ### 已執行測試與結果
-- `node --check js/app.js` → PASS
-- `scripts/qa.ps1` → PASS
-- `git diff --check` → PASS
-- Node VM 回歸測試（Level 2 & Level 3）：
-  1. Case 1（單筆中華電信真實格式）：lat, lng, azi, towerId, cellId, reqTime, responseTime, regTime, address 全部通過。
-  2. Case 2（同基地臺不同 Cell）：315932 / Cell 13 / 40°、315932 / Cell 31 / 330°、315932 / Cell 33 / 330° 全部保留，未被誤吞。
-  3. Case 3（不同基地臺）：315932, 319010, 319372 全部正確辨識。
-  4. Case 4（完整 18 筆真實排版）：內部完整解析 18 筆，按時間正向排序，UI 依 maxBatchLimit 載入最新 5 筆。
-  5. 遠傳電信調閱回覆（含 GMLC）：解析通過。
-  6. 台灣大哥大調閱回覆：解析通過。
-  7. DMS / DMM / DD 座標轉換：度分秒換算通過。
-  8. 民國紀年時間解析：民國 115 年換算通過。
-  9. 三大底圖（OSM、NLSC、Esri）在 zoom 16~19 HTTP 請求驗證：全部 HTTP 200 正常載入。
-  10. Playwright 實機極限放大測試（南化國中 23.045082, 120.480330）：OSM 在 Zoom 19 字體大且清晰銳利，無任何灰色 404 缺磚破圖，與官方 OpenStreetMap 網站視覺一致。
-  11. Playwright 實機全白防護測試（經國路 25.01435, 121.30652）：NLSC 放大至 19 即停止放大（`+` 號按鈕 disabled），街廓門牌清晰，絕不進入 Zoom 20，零全白。
-  12. Playwright 實機底圖切換聯動測試：切換衛星圖時由 Zoom 19 自動安全降至 Zoom 18，影像清晰覆蓋，零全白；再切回 NLSC 時自動放寬回 19。
-
+原始版本隔離測試失敗；修正後完整 npm test 31/31 通過。
 ### 尚未驗證項目
-- 真實 iPhone 實機開啟線上版進行手動點擊實測（已透過 DevTools 高 DPI 與 Playwright 模擬驗證）。
-
+本機修正尚未部署；真實手機已安裝 PWA 的更新／離線驗收仍待執行。
 ### 已知風險 (Known Risks)
-- NLSC 為政府開放圖資服務，若遇伺服器維護時會由 OSM 雙層備援機制處理。
-
----
+原始碼修正不會自動更新線上服務、已安裝 PWA 或舊下載包。
 
 ## Git 狀態
-- Commit：上述 SHA 為提交前基準；最新 SHA 見 `git log -1` 與中央同步報告。
-- Push：實際推送及遠端核對結果見中央 `docs/github-sync/RESULTS.md`。
-- Working Tree：最終狀態見中央同步報告；不含被忽略的環境、成品與使用者資料。
+- Commit：本輪修正與發布準備合併為獨立提交；實際 SHA 見 Git 與中央發布報告。
+- Push：使用者已授權，本提交後執行並核對。
+- Working Tree：提交後確認 Clean；不包含被忽略的成品與測試環境。
 - Branch：main。
 
 ## 下一步建議動作 (Next Recommended Action)
-1. 在 iPhone / 手機實機開啟線上正式版（https://lianghao02.github.io/Cell-Tower-Map-Locator/）確認底圖文字清晰度與操作手感。
-2. 規劃並啟動 v3.3.0 基地台飄移與跳訊智慧研判機制。
-
----
+核對中央 `docs/audit-release-20261022.md` 的實際發布結果；成功後停止擴大修改，僅保留已註明的人工驗收。
 
 ## 發布狀態 (Release Status)
-可交付
+使用者已授權本輪發布；產品版本與實際 Release／部署核對結果以中央發布報告為準。人工驗收缺口不冒充通過。

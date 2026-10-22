@@ -1,6 +1,6 @@
-# 📡 手機門號基地台即時定位工具 (v3.2.3)
+# 📡 手機門號基地台即時定位工具 (v3.2.4)
 
-[![Version](https://img.shields.io/badge/version-v3.2.3-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.2.4-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-線上即開即用-emerald.svg)](https://lianghao02.github.io/Cell-Tower-Map-Locator/)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Mobile%20%7C%20Desktop-orange.svg)](#)
