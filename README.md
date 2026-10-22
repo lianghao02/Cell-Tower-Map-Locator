@@ -1,6 +1,6 @@
-# 📡 手機門號基地台即時定位工具 (v3.2.2)
+# 📡 手機門號基地台即時定位工具 (v3.2.3)
 
-[![Version](https://img.shields.io/badge/version-v3.2.2-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
+[![Version](https://img.shields.io/badge/version-v3.2.3-blue.svg)](https://github.com/lianghao02/Cell-Tower-Map-Locator)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-線上即開即用-emerald.svg)](https://lianghao02.github.io/Cell-Tower-Map-Locator/)
 [![Leaflet](https://img.shields.io/badge/Map-Leaflet.js-green.svg)](https://leafletjs.com)
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20Mobile%20%7C%20Desktop-orange.svg)](#)
@@ -102,7 +102,7 @@ powershell -ExecutionPolicy Bypass -File scripts\qa.ps1
 
 ## 📄 版權聲明 (License)
 
-System Version 3.2.2 &copy; 2026 Cell Phone Locator. All rights reserved.
+System Version 3.2.3 &copy; 2026 Cell Phone Locator. All rights reserved.
 
 ## 已知 Bug、限制與疑難排解
 
