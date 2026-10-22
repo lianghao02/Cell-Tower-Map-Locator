@@ -32,7 +32,16 @@
 
 ---
 
-## 4. 核心驗證方式
+## 4. 模組地圖（改哪裡、跑什麼）
+- `js/geometry.js`：扇形幾何純函式（方位角、扇形判斷、凸多邊形裁切與交集、面積、重心）。不碰 DOM／地圖／儲存。
+- `js/parser.js`：調閱文字解析純函式（方位角驗證、入口網站回覆辨識與解析、DMS／DMM、門號、民國日期）。座標界線預設值 `PARSER_DEFAULT_BOUNDS` 只在此定義；需要界線的函式以最後一個選用參數 `cfg` 接收，`app.js` 每次呼叫都要傳入當下的 `config`（使用者可儲存自訂界線，不可在 parser 內保存副本）。
+- `js/app.js`：畫面、地圖、歷史紀錄、事件與 `parse()` 整合流程（`parse()` 同時更新畫面，不是純函式）。
+- 三檔都是傳統 `<script>`（離線雙擊 `index.html` 也能運作），**載入順序固定為 geometry → parser → app**；新增或改名檔案時，同步更新 `index.html`、`sw.js` 預快取清單（並升快取名稱）、`tests/harness.js` 的 `MODULES` 與下方語法檢查。
+- 修改解析或幾何：`npm test`（30 項，含 cfg 覆寫與單一來源檢查）。修改畫面：另需在瀏覽器實測。
+
+---
+
+## 5. 核心驗證方式
 - 修改 JavaScript 邏輯或樣式後，必須執行語法檢查與品質驗證：
   ```powershell
   node --check js/app.js; node --check js/geometry.js; node --check js/parser.js
@@ -41,7 +50,7 @@
 
 ---
 
-## 5. 共用 Skill 引用與動態解析 (Discovery Rule)
+## 6. 共用 Skill 引用與動態解析 (Discovery Rule)
 - 本專案遵循 LiangHao 全生態系標準規範 Skill：`lianghao-development`（Canonical Source 位於 `Dev-Control-Center/configs/skills/lianghao-development`，v1.0.0）。
 - Agent 開始工作時：
   1. 優先使用目前環境可自動發現的 `lianghao-development` Skill

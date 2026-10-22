@@ -2,6 +2,17 @@
 
 # HANDOFF
 
+## 2026-10-22 拆出純函式模組（Claude，分支 refactor/pure-modules，未合併、未推送）
+- 依「有條件、分批、先補測試再拆」原則，在獨立分支 `refactor/pure-modules` 分三步拆分，每步單獨提交、不夾帶功能修改：
+  1. `bdc790b` 測試載入器支援載入拆出的模組（行為不變）。
+  2. `0f9e9a9` 9 個幾何純函式 → `js/geometry.js`（逐字搬移，函式本體 9/9 與原檔一致）。
+  3. `2499aed` 5 個解析輔助純函式 → `js/parser.js`（逐字搬移，5/5 一致）。
+  4. `f01dc91` 需要座標界線的 3 個函式（`parseDMSToDD`、`parsePortalCoordinateSection`、`parsePortalResponse`）→ `js/parser.js`；原本讀閉包 `config` 改為選用參數 `cfg`，`app.js` 傳入當下 `config`；界線預設值只在 parser.js 定義。還原改動後 3/3 與原檔一致。
+- `app.js` 2,588 → 2,164 行；`parse()`（同時更新畫面）與 `esc`（畫面用）刻意留在 app.js。
+- `index.html` 載入順序 geometry → parser → app；`sw.js` 預快取加入兩檔並升為 `cell-tower-locator-v2`（已安裝的 PWA 更新後離線仍完整）。
+- 驗證：`npm test` 30/30（新增 2 項鎖住 cfg 覆寫與單一來源）、`scripts/qa.ps1` 通過；真實瀏覽器驗證幾何運算、虛構入口網站回覆端到端解析，以及「使用者儲存自訂界線後重新載入」會改變解析結果。
+- 未做：未合併回 `main`、未推送、未升版；建議合併後依原發布流程升版並在手機實機確認 PWA 更新。`AGENTS.md` 新增模組地圖。
+
 ## 2026-10-21 補解析回歸測試（Claude）
 - 新增 `tests/`（`harness.js`＋`parser.test.js`，28 項）與只含測試指令的 `package.json`；執行：`npm test`。`harness.js` 在 vm 沙盒載入 `js/app.js`，以萬用替身取代 DOM 與 Leaflet，並在「公開介面」前插入一行匯出內部函式（只在測試載入時，不改動正式檔）。
 - 以 8 種故意改壞（去重忽略細胞編號、扇形跨 360 度、民國年位移、座標範圍、門號格式、失敗紀錄被繪製等）驗證測試會失敗；補強兩個原本太弱的案例後 8/8 皆被抓到。
