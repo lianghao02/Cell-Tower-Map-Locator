@@ -4,6 +4,7 @@ const PRECACHE_ASSETS = [
     './index.html',
     './css/style.css',
     './js/geometry.js',
+    './js/parser.js',
     './js/app.js',
     './manifest.webmanifest',
     './icon-192.png',
