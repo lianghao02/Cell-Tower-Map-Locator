@@ -770,16 +770,15 @@
                         subdomains: 'abc',
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     });
-                    osmLayer.on('tileerror', function(error, tile) {
-                        // 雙層自動容錯：若主圖磚伺服器連線異常，自動備援降級為內政部國土測繪圖資 (100% 繁體中文)
-                        const fallbackUrl = `https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/${error.coords.z}/${error.coords.y}/${error.coords.x}`;
-                        if (tile.src !== fallbackUrl) {
-                            tile.src = fallbackUrl;
-                        }
+                    osmLayer.on('tileerror', function(event) {
+                        // 雙層自動容錯：主圖磚伺服器連線異常時，改用內政部國土測繪圖資（繁體中文）。
+                        // Leaflet 只傳一個事件物件；備援網址的判斷在 js/tiles.js（有測試）。
+                        const fallbackUrl = tileFallbackUrl(event);
+                        if (fallbackUrl) event.tile.src = fallbackUrl;
                     });
                     osmLayer.addTo(map);
 
-                    const nlscLayer = L.tileLayer("https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}", {
+                    const nlscLayer = L.tileLayer(NLSC_TILE_URL, {
                         maxZoom: 19,
                         maxNativeZoom: 19,
                         attribution: '&copy; <a href="https://maps.nlsc.gov.tw">國土測繪圖資服務雲</a>'

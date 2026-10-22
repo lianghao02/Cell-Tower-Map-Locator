@@ -1,8 +1,12 @@
 {
   "name": "cell-tower-map-locator",
   "private": true,
-  "description": "僅供開發測試使用；執行與發布不需要 Node.js，也沒有任何相依套件。",
+  "description": "執行與發布不需要 Node.js；Node 只用於測試與重新編譯 Tailwind 樣式（開發用）。",
   "scripts": {
-    "test": "node --test tests/parser.test.js tests/service-worker.test.js"
+    "test": "node --test tests/parser.test.js tests/service-worker.test.js tests/tiles.test.js tests/offline-assets.test.js",
+    "build:css": "tailwindcss -c tailwind.config.cjs -i css/tailwind.src.css -o css/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
   }
 }
