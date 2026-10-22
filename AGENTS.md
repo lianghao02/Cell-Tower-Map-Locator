@@ -35,7 +35,7 @@
 ## 4. 核心驗證方式
 - 修改 JavaScript 邏輯或樣式後，必須執行語法檢查與品質驗證：
   ```powershell
-  node --check js/app.js
+  node --check js/app.js; node --check js/geometry.js
   powershell -ExecutionPolicy Bypass -File scripts\qa.ps1
   ```
 

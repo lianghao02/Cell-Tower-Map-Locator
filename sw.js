@@ -1,8 +1,9 @@
-const CACHE_NAME = 'cell-tower-locator-v1';
+const CACHE_NAME = 'cell-tower-locator-v2';
 const PRECACHE_ASSETS = [
     './',
     './index.html',
     './css/style.css',
+    './js/geometry.js',
     './js/app.js',
     './manifest.webmanifest',
     './icon-192.png',
