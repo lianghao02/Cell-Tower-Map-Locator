@@ -11,7 +11,7 @@ const EXPORTS = [
     'parseDMSToDD', 'normalizeInputText', 'isPortalResponse', 'normalizePhone', 'parseDateTimeToMs',
     'parsePortalCoordinateSection', 'parsePortalResponse', 'parse', 'calculateBearing', 'isAngleWithinSector',
     'isValidAzimuth', 'esc', 'ensureCCW', 'clipPolygon', 'intersectMultipleConvexPolygons',
-    'computePolygonAreaM2', 'computePolygonCentroid'
+    'computePolygonAreaM2', 'computePolygonCentroid', 'PARSER_DEFAULT_BOUNDS'
 ];
 
 // 萬用替身：任何屬性、呼叫都回傳替身自己，可安全當作 DOM 或 Leaflet 物件。

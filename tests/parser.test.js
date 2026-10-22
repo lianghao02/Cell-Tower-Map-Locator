@@ -151,6 +151,28 @@ test('座標超出台灣範圍的紀錄不會被採用（緯度、經度各自�
     }
 });
 
+// ---------- 座標界線（config 由 app.js 每次呼叫時傳入） ----------
+test('app 的 DEFAULT_CONFIG 界線取自 parser.js 的唯一定義', () => {
+    for (const key of ['boundsLatMin', 'boundsLatMax', 'boundsLngMin', 'boundsLngMax']) {
+        assert.equal(t.getConfig()[key], t.PARSER_DEFAULT_BOUNDS[key], key);
+    }
+});
+
+test('選用參數 cfg 可覆寫座標界線；省略時使用預設界線', () => {
+    const narrow = { boundsLatMin: 30, boundsLatMax: 40, boundsLngMin: 118, boundsLngMax: 124 };
+    // 界線只在「沒有 N／E 字母」時用來分辨緯度與經度，所以測試輸入不帶字母（DMS 與 DMM 兩個分支都檢查）。
+    for (const [label, text] of [['DMS', `25°01'58.8" 121°33'54.0"`], ['DMM', `25°01.98' 121°33.9'`]]) {
+        assert.equal(t.parseDMSToDD(text).length, 1, `${label} 預設界線`);
+        assert.equal(t.parseDMSToDD(text, narrow).length, 0, `${label} 緯度落在自訂界線外`);
+        assert.equal(t.parseDMSToDD(text, t.PARSER_DEFAULT_BOUNDS).length, 1, `${label} 明確傳入預設值`);
+    }
+    const text = portalResponse([portalRecord({ lat: 25.033, lng: 121.565 })]);
+    assert.equal(t.parsePortalResponse(text, '').records.length, 1, '預設界線');
+    const r = t.parsePortalResponse(text, '', narrow);
+    assert.equal(r.records.length, 0, '自訂界線會一路傳到基地臺座標檢查');
+    assert.equal(r.missingTowerCount, 1);
+});
+
 test('去重：完全相同的紀錄只留一筆，細胞編號或方位角不同則保留', () => {
     const same = portalResponse([portalRecord({ seq: 1 }), portalRecord({ seq: 2 })]);
     assert.equal(t.parsePortalResponse(same, '').records.length, 1, '完全相同');
