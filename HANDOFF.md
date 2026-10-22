@@ -2,7 +2,14 @@
 
 # HANDOFF
 
-## 2026-10-22 拆出純函式模組（Claude，分支 refactor/pure-modules，未合併、未推送）
+## 2026-10-22 v3.2.3 發布：PWA、解析回歸測試與模組拆分（Claude）
+- **發布結果**：使用者授權後，`refactor/pure-modules` 以快轉合併回 `main`，提交 b6ae7be 並推送；annotated tag `v3.2.3` 與 GitHub Release 已建立。GitHub Pages 建置完成（built b6ae7be），正式站 `index.html`、`sw.js`、`js/app.js`、`js/geometry.js`、`js/parser.js` 與提交逐位元組一致（5/5），快取 `cell-tower-locator-v2`、頁尾 v3.2.3。
+- 正式網址真瀏覽器冒煙測試：載入順序 geometry → parser → app、解析正確、主控台零錯誤。`check_release_versions.py 02 --online`：0 矛盾。
+- 本版同時正式發版先前已完成但未升版的 PWA 支援與解析回歸測試。
+- 未驗證：手機實機的 PWA 更新（已安裝者會在下次開啟時換新快取）。
+- 下方為拆分過程的原記錄。
+
+### 拆分過程（原記錄）
 - 依「有條件、分批、先補測試再拆」原則，在獨立分支 `refactor/pure-modules` 分三步拆分，每步單獨提交、不夾帶功能修改：
   1. `bdc790b` 測試載入器支援載入拆出的模組（行為不變）。
   2. `0f9e9a9` 9 個幾何純函式 → `js/geometry.js`（逐字搬移，函式本體 9/9 與原檔一致）。
