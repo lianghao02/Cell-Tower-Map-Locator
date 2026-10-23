@@ -13,7 +13,7 @@
     <meta name="author" content="LiangHao">
     <title>手機門號即時定位 | LiangHao Dev</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <meta name="theme-color" content="#2B364B">
+    <meta name="theme-color" content="#edf5ed">
     <meta name="apple-mobile-web-app-title" content="基地台定位">
     <link rel="apple-touch-icon" href="icon-192.png">
     <!-- Favicon 圖示 (內建 SVG，完全防範 404 報錯) -->
@@ -208,8 +208,8 @@
                     <!-- 系統標題與設定按鈕 -->
                     <div class="flex justify-between items-center pb-3 border-b border-slate-200/60">
                         <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-user-shield text-accent text-lg animate-pulse"></i>
-                            <h1 class="text-sm font-bold text-slate-800 m-0">手機門號即時定位 <span class="text-[10px] text-slate-400 font-normal">v3.2.4</span></h1>
+                            <svg class="pixel-tower" viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="15" fill="#d9eddf"/><g stroke="#497667" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 17q-5 5 0 10M35 17q5 5 0 10M17 19q-3 3 0 6M31 19q3 3 0 6" fill="none"/><path d="m21 25-5 14h16l-5-14" fill="#a0c9bc"/><rect x="18" y="14" width="12" height="15" rx="5" fill="#fff9e9"/><path d="M24 14V9"/><circle cx="24" cy="8" r="2.5" fill="#f5c66d" stroke="none"/><path d="M22 24q2 2 4 0" fill="none"/></g><g fill="#37574f"><circle cx="21.5" cy="20.5" r="1"/><circle cx="26.5" cy="20.5" r="1"/></g></svg>
+                            <div class="game-title"><span class="game-eyebrow">SIGNAL STATION · 訊號小站</span><h1 class="text-sm font-bold text-slate-800 m-0">基地台訊號分析 <span class="game-version">v3.2.4</span></h1></div>
                         </div>
                         <div class="flex items-center gap-1">
                             <!-- 手機端快速收合按鈕 -->
@@ -222,6 +222,7 @@
                         </div>
                     </div>
 
+                <div class="game-status"><span><b aria-hidden="true">■</b> 本機解析</span><span>訊號覆蓋推估・非實際位置</span></div>
                 <!-- Tabs 標籤選單 -->
                 <div id="tabMenu" class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
                     <button onclick="app.switchTab('parse')" id="tab-btn-parse" class="tab-btn active flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">

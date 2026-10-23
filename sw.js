@@ -1,6 +1,6 @@
 // CacheStorage 與同來源的其他網站共用，只清理本專案的舊版本。
 const CACHE_PREFIX = 'cell-tower-locator-';
-const CACHE_NAME = 'cell-tower-locator-v4';
+const CACHE_NAME = 'cell-tower-locator-v6';
 
 // 全部資源都在本機（不連外部 CDN）。新增或改名檔案時，同步更新這份清單與 index.html（有測試比對）。
 const PRECACHE_ASSETS = [
