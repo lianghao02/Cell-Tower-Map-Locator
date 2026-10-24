@@ -206,7 +206,7 @@
                 <!-- 可展開之主要表單內容 -->
                 <div class="sheet-expandable-content flex flex-col flex-1 overflow-hidden space-y-3">
                     <!-- 系統標題與設定按鈕 -->
-                    <div class="flex justify-between items-center pb-3 border-b border-slate-200/60">
+                    <div class="console-heading flex justify-between items-center pb-3 border-b border-slate-200/60">
                         <div class="flex items-center gap-2">
                             <svg class="pixel-tower" viewBox="0 0 48 48" width="44" height="44" aria-hidden="true"><rect x="2" y="2" width="44" height="44" rx="15" fill="#d9eddf"/><g stroke="#497667" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 17q-5 5 0 10M35 17q5 5 0 10M17 19q-3 3 0 6M31 19q3 3 0 6" fill="none"/><path d="m21 25-5 14h16l-5-14" fill="#a0c9bc"/><rect x="18" y="14" width="12" height="15" rx="5" fill="#fff9e9"/><path d="M24 14V9"/><circle cx="24" cy="8" r="2.5" fill="#f5c66d" stroke="none"/><path d="M22 24q2 2 4 0" fill="none"/></g><g fill="#37574f"><circle cx="21.5" cy="20.5" r="1"/><circle cx="26.5" cy="20.5" r="1"/></g></svg>
                             <div class="game-title"><span class="game-eyebrow">SIGNAL STATION · 訊號小站</span><h1 class="text-sm font-bold text-slate-800 m-0">基地台訊號分析 <span class="game-version">v3.2.4</span></h1></div>
@@ -224,17 +224,17 @@
 
                 <div class="game-status"><span><b aria-hidden="true">■</b> 本機解析</span><span>訊號覆蓋推估・非實際位置</span></div>
                 <!-- Tabs 標籤選單 -->
-                <div id="tabMenu" class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
-                    <button onclick="app.switchTab('parse')" id="tab-btn-parse" class="tab-btn active flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                <div id="tabMenu" role="navigation" aria-label="主要功能" class="flex justify-around items-center border-b border-slate-200/60 pb-2 mb-3 text-slate-400 text-[11px] font-bold">
+                    <button onclick="app.navigateTab('parse')" id="tab-btn-parse" class="tab-btn active flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
                         <i class="fa-solid fa-bolt text-sm"></i><span>智慧解析</span>
                     </button>
-                    <button onclick="app.switchTab('base')" id="tab-btn-base" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                    <button onclick="app.navigateTab('base')" id="tab-btn-base" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
                         <i class="fa-solid fa-tower-cell text-sm"></i><span id="tab-label-base">定位資料</span>
                     </button>
-                    <button onclick="app.switchTab('compare')" id="tab-btn-compare" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                    <button onclick="app.navigateTab('compare')" id="tab-btn-compare" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
                         <i class="fa-solid fa-house-laptop text-sm"></i><span>空間對比</span>
                     </button>
-                    <button onclick="app.switchTab('history')" id="tab-btn-history" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
+                    <button onclick="app.navigateTab('history')" id="tab-btn-history" class="tab-btn flex flex-col items-center gap-1 border-none bg-transparent cursor-pointer">
                         <i class="fa-solid fa-clock-rotate-left text-sm"></i><span>最近歷史</span>
                     </button>
                 </div>
@@ -503,7 +503,7 @@
         </div>
 
         <!-- 右側懸浮戰術功能按鈕組 (GPS 自身定位 & 手機端控制台展開 FAB) -->
-        <div class="fixed right-4 bottom-20 md:bottom-8 z-30 flex flex-col gap-2.5 pointer-events-auto">
+        <div id="map-tools" class="fixed right-4 bottom-20 md:bottom-8 z-30 flex flex-col gap-2.5 pointer-events-auto">
             <!-- 1. GPS 自身定位按鈕 -->
             <button id="btnMyLocation" class="w-12 h-12 bg-white/95 hover:bg-white text-slate-700 hover:text-accent rounded-full shadow-xl border border-white/80 flex items-center justify-center cursor-pointer transition-all hover:scale-105 active:scale-95 group" onclick="app.locateMe()" title="我的目前位置 (GPS)">
                 <i class="fa-solid fa-location-crosshairs text-lg text-accent group-hover:rotate-45 transition-transform" id="iconMyLocation"></i>

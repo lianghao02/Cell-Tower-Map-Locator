@@ -76,7 +76,7 @@
             const HISTORY_STORAGE_KEY = "cell_locate_v1_db";
 
             function isMobileLayout() {
-                return window.matchMedia("(max-width: 768px)").matches;
+                return window.matchMedia("(max-width: 767px)").matches;
             }
 
             function getFitBoundsOptions() {
@@ -121,6 +121,7 @@
 
                     syncConfigToUI();
                     initDrawer(); // 側邊抽屜事件只綁定一次
+                    initNavigation();
                     syncConsoleToggleIcon();
                     window.addEventListener("resize", syncConsoleToggleIcon);
 
@@ -1922,6 +1923,30 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 }
             }
 
+            // 同一組分頁按鈕：手機移至 body，桌面回到原本位置。
+            function initNavigation() {
+                const menu = document.getElementById("tabMenu");
+                const anchor = document.createComment("desktop navigation");
+                menu.before(anchor);
+                const layout = window.matchMedia("(max-width: 767px)");
+                const syncLayout = () => {
+                    if (layout.matches) document.body.append(menu);
+                    else anchor.after(menu);
+                    syncConsoleToggleIcon();
+                };
+                layout.addEventListener("change", syncLayout);
+                syncLayout();
+            }
+
+            function navigateTab(tabName) {
+                const button = document.getElementById(`tab-btn-${tabName}`);
+                const wasActive = button && button.classList.contains("active");
+                const consoleEl = document.getElementById("floating-console");
+                const wasCollapsed = consoleEl.classList.contains("collapsed");
+                switchTab(tabName);
+                if (isMobileLayout()) toggleConsole(wasActive && !wasCollapsed);
+            }
+
             // Tab 標籤切換
             function switchTab(tabName) {
                 const contents = document.querySelectorAll(".tab-content");
@@ -1935,6 +1960,8 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
 
                 const targetBtn = document.getElementById(`tab-btn-${tabName}`);
                 if (targetBtn) targetBtn.classList.add("active");
+
+                syncConsoleToggleIcon();
 
                 if (tabName === "history") {
                     renderHistory();
@@ -1968,6 +1995,13 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 ["btnSheetHandle", "btnSheetSummary", "btnOpenSheetFab"].forEach((id) => {
                     const button = document.getElementById(id);
                     if (button) button.setAttribute("aria-expanded", String(!isCollapsed));
+                });
+                document.querySelectorAll("#tabMenu .tab-btn").forEach((button) => {
+                    const active = button.classList.contains("active");
+                    button.setAttribute("aria-controls", button.id.replace("tab-btn-", "tab-content-"));
+                    button.setAttribute("aria-expanded", String(active && (!isMobileLayout() || !isCollapsed)));
+                    if (active) button.setAttribute("aria-current", "true");
+                    else button.removeAttribute("aria-current");
                 });
                 arrow.classList.remove("fa-chevron-left", "fa-chevron-right", "fa-chevron-up", "fa-chevron-down");
                 if (isMobileLayout()) {
@@ -2137,6 +2171,7 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                 toggleMapSelect,
                 clearAddress,
                 switchTab,
+                navigateTab,
                 toggleConsole,
                 locateMe,
                 toggleHistorySelect,
