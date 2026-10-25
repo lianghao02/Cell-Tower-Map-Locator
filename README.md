@@ -102,7 +102,7 @@ powershell -ExecutionPolicy Bypass -File scripts\qa.ps1
 
 ## 📄 版權聲明 (License)
 
-System Version 3.2.3 &copy; 2026 Cell Phone Locator. All rights reserved.
+System Version 3.3.0 &copy; 2026 Cell Phone Locator. All rights reserved.
 
 ## 已知 Bug、限制與疑難排解
 

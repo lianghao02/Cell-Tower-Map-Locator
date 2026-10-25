@@ -11,7 +11,7 @@ const EXPORTS = [
     'parseDMSToDD', 'normalizeInputText', 'isPortalResponse', 'normalizePhone', 'parseDateTimeToMs',
     'parsePortalCoordinateSection', 'parsePortalResponse', 'parse', 'calculateBearing', 'isAngleWithinSector',
     'isValidAzimuth', 'esc', 'ensureCCW', 'clipPolygon', 'intersectMultipleConvexPolygons',
-    'computePolygonAreaM2', 'computePolygonCentroid', 'PARSER_DEFAULT_BOUNDS'
+    'computePolygonAreaM2', 'computePolygonCentroid', 'PARSER_DEFAULT_BOUNDS', 'init'
 ];
 
 // 萬用替身：任何屬性、呼叫都回傳替身自己，可安全當作 DOM 或 Leaflet 物件。
@@ -38,7 +38,7 @@ function anything(overrides = {}) {
 // 從 app.js 拆出的純函式模組（傳統 script，需在 app.js 之前載入）；檔案存在才載入，順序與 index.html 一致。
 const MODULES = ['geometry.js', 'parser.js'];
 
-function loadApp() {
+function loadApp(overrides = {}) {
     let src = fs.readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf8');
     const marker = '// 公開介面 (Public API)';
     const at = src.indexOf(marker);
@@ -52,6 +52,7 @@ function loadApp() {
         querySelector: () => anything(),
         querySelectorAll: () => [],
         createElement: () => anything(),
+        createComment: () => anything(),
         addEventListener: () => {},
         body: anything()
     });
@@ -67,7 +68,8 @@ function loadApp() {
         setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {}, requestAnimationFrame: () => 0,
         matchMedia: () => anything({ matches: false }),
         innerWidth: 1200, innerHeight: 800,
-        Date, Math, JSON, Number, String, Array, Object, Set, Map, RegExp, Error, parseFloat, parseInt, isNaN, Promise
+        Date, Math, JSON, Number, String, Array, Object, Set, Map, RegExp, Error, parseFloat, parseInt, isNaN, Promise,
+        ...overrides
     };
     sandbox.window = sandbox;
     sandbox.globalThis = sandbox;
@@ -79,7 +81,7 @@ function loadApp() {
     }
     vm.runInContext(src, sandbox, { filename: 'app.js' });
     if (!sandbox.__t) throw new Error('測試匯出失敗');
-    return { t: sandbox.__t, elements, alerts: sandbox.__alerts };
+    return { t: sandbox.__t, elements, alerts: sandbox.__alerts, document };
 }
 
 // 以貼上文字執行完整 parse()。parse() 後半段會呼叫地圖與介面更新（已用替身取代）。
@@ -95,4 +97,4 @@ function runParse(app, text) {
     return { data: app.t.getData(), alerts: app.alerts.slice() };
 }
 
-module.exports = { loadApp, runParse };
+module.exports = { loadApp, runParse, anything };

@@ -1934,7 +1934,11 @@ t += `定位經緯度: ${data.lat}, ${data.lng}`;
                     else anchor.after(menu);
                     syncConsoleToggleIcon();
                 };
-                layout.addEventListener("change", syncLayout);
+                if (typeof layout.addEventListener === "function") {
+                    layout.addEventListener("change", syncLayout);
+                } else if (typeof layout.addListener === "function") {
+                    layout.addListener(syncLayout);
+                }
                 syncLayout();
             }
 

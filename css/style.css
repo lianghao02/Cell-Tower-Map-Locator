@@ -292,7 +292,7 @@ body > div > .mt-auto { background: #fffdf5 !important; border-color: #97b6aa !i
     #console-card { max-height: min(75dvh, calc(100dvh - var(--mobile-nav-height) - 16px)) !important; }
     #map-tools { bottom: calc(var(--mobile-nav-height) + 76px); }
     #btnOpenSheetFab { display: none; }
-    body > div > .mt-auto { display: none; }
+    #app-footer { display: none; }
     .leaflet-bottom { bottom: var(--mobile-nav-height); }
     #console-card input, #console-card textarea { font-size: 16px; }
     #console-card .console-heading { padding-bottom: 4px; }
