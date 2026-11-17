@@ -9,6 +9,7 @@
 const PARSER_DEFAULT_BOUNDS = { boundsLatMin: 21, boundsLatMax: 27, boundsLngMin: 118, boundsLngMax: 124 };
 
 function isValidAzimuth(value) {
+    if ((typeof value !== "number" && typeof value !== "string") || String(value).trim() === "") return false;
     const azimuth = Number(value);
     return Number.isFinite(azimuth) && azimuth >= 0 && azimuth <= 360;
 }
@@ -219,9 +220,9 @@ function parsePortalResponse(text, fallbackPhone, cfg = PARSER_DEFAULT_BOUNDS) {
         if (isSuccess) completedCount += 1;
         else failedCount += 1;
 
-        const reqMatch = block.match(/(?:定位請求的時間|定位請求時間|請求定位時間|Positioning Request|detected\s+at)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/i);
-        const respMatch = block.match(/(?:定位回應的時間|定位回應時間|回應定位時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
-        const regMatch = block.match(/(?:註冊基地[臺台]時間|最後註冊時間|基地[臺台]註冊時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+        const reqMatch = block.match(/(?:定位請求的時間|定位請求時間|請求定位時間|Positioning Request|detected\s+at)\s*[：:]?\s*(\d{2,4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/i);
+        const respMatch = block.match(/(?:定位回應的時間|定位回應時間|回應定位時間)\s*[：:]?\s*(\d{2,4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+        const regMatch = block.match(/(?:註冊基地[臺台]時間|最後註冊時間|基地[臺台]註冊時間)\s*[：:]?\s*(\d{2,4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
         const towerIdMatch = block.match(/(?:基地[臺台]編號|註冊基地[臺台]編號|Tower[- ]?ID)\s*[：:]?\s*([A-Za-z0-9_-]+)/i);
         const cellMatch = block.match(/(?:細胞編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
         const addrMatch = block.match(/(?:細胞地址|基地[臺台]地址|門牌地址|地址)\s*[：:]?\s*([^\r\n]+)/);
@@ -276,6 +277,7 @@ function parsePortalResponse(text, fallbackPhone, cfg = PARSER_DEFAULT_BOUNDS) {
             Math.abs(item.lat - r.lat) < 0.00001 &&
             Math.abs(item.lng - r.lng) < 0.00001 &&
             item.azi === r.azi &&
+            item.phone === r.phone &&
             (item.reqTime || item.regTime) === (r.reqTime || r.regTime) &&
             ((!item.towerId && !r.towerId) || item.towerId === r.towerId) &&
             ((!item.cellId && !r.cellId) || item.cellId === r.cellId)

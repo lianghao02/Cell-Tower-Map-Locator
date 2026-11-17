@@ -256,7 +256,7 @@
                 }
 
                 const parsedList = portalResult ? portalResult.records.slice() : [];
-                const timePattern = "(\\d{4}[-\\/]\\d{1,2}[-\\/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}:\\d{1,2})";
+                const timePattern = "(\\d{2,4}[-\\/]\\d{1,2}[-\\/]\\d{1,2}\\s+\\d{1,2}:\\d{1,2}:\\d{1,2})";
 
                 rawBlocks.forEach((block) => {
                     if (!block.trim()) return;
@@ -286,7 +286,7 @@
                     const towerIdM = block.match(/(?:基地[臺台]編號|註冊基地[臺台]編號|Tower[- ]?ID)\s*[：:]?\s*([A-Za-z0-9_-]+)/i);
                     const cellIdM = block.match(/(?:細胞編號|Cell[- ]?ID)\s*[：:]?\s*(\d+)/i);
                     const addrM = block.match(/(?:細胞地址|基地[臺台]地址|門牌地址|地址)\s*[：:]?\s*([^\r\n]+)/);
-                    const respM = block.match(/(?:定位回應的時間|定位回應時間|回應定位時間)\s*[：:]?\s*(\d{4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
+                    const respM = block.match(/(?:定位回應的時間|定位回應時間|回應定位時間)\s*[：:]?\s*(\d{2,4}[\/-]\d{1,2}[\/-]\d{1,2}\s+\d{1,2}:\d{2}:\d{2})/);
                     const blockTowerId = towerIdM ? towerIdM[1] : "";
                     const blockCellId = cellIdM ? cellIdM[1] : "";
                     const blockAddr = addrM ? addrM[1].trim() : "";
@@ -329,6 +329,7 @@
                                 Math.abs(item.lng - c.lng) < 0.00001 &&
                                 (item.reqTime || item.regTime) === (reqTime || regTime) &&
                                 item.azi === azi &&
+                                item.phone === blockPhone &&
                                 ((!item.towerId && !blockTowerId) || item.towerId === blockTowerId) &&
                                 ((!item.cellId && !blockCellId) || item.cellId === blockCellId)
                             );

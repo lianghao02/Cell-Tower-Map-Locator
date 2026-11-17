@@ -39,7 +39,7 @@ function portalResponse(records, declared) {
 // ---------- 基礎函式 ----------
 test('方位角必須是 0 到 360 的數字', () => {
     for (const v of [0, 120, 360, '45.5']) assert.equal(t.isValidAzimuth(v), true, String(v));
-    for (const v of [-1, 361, NaN, 'abc', Infinity]) assert.equal(t.isValidAzimuth(v), false, String(v));
+    for (const v of [-1, 361, NaN, 'abc', Infinity, null, undefined, '', '  ', false, []]) assert.equal(t.isValidAzimuth(v), false, String(v));
 });
 
 test('輸入文字正規化：換行、<br> 與不換行空白', () => {
@@ -310,4 +310,36 @@ test('多邊形面積（公尺）：台北緯度 0.001 度見方約 111 × 101 �
     const expected = 111.32 * (111.32 * Math.cos((lat + d / 2) * Math.PI / 180));
     near(area, expected, expected * 0.01, '面積');
     assert.equal(t.computePolygonAreaM2([[0, 0], [1, 1]]), 0, '少於三點為 0');
+});
+
+
+test('入口回覆：民國請求、回應及註冊時間保留，不合併不同時間紀錄', () => {
+    const r = t.parsePortalResponse(portalResponse([
+        portalRecord({ req: '115/11/16 10:00:00', reg: '115/11/16 09:59:00' }),
+        portalRecord({ seq: 2, req: '115/11/16 11:00:00', reg: '115/11/16 10:59:00' })
+    ]), '');
+    assert.equal(r.records.length, 2);
+    assert.equal(r.records[0].reqTime, '115/11/16 10:00:00');
+    assert.equal(r.records[0].responseTime, '115/11/16 10:00:05');
+    assert.equal(r.records[0].regTime, '115/11/16 09:59:00');
+});
+
+test('入口回覆及一般文字：不同門號同站同時仍保留兩筆', () => {
+    const records = [portalRecord({ phone: '0911111111' }), portalRecord({ seq: 2, phone: '0922222222' })];
+    assert.equal(t.parsePortalResponse(portalResponse(records), '').records.length, 2);
+    const a = loadApp();
+    runParse(a, '門號: 0911111111\n25.033, 121.565\n\n門號: 0922222222\n25.033, 121.565');
+    eq(a.t.getData().towers.map(x => x.phone), ['0911111111', '0922222222']);
+});
+
+test('未提供方位角時可分析筆數為零', () => {
+    const a = loadApp();
+    runParse(a, portalResponse([portalRecord({ az: null })]));
+    assert.match(a.elements.batchNoticeText.innerText, /可進行扇形分析 0 筆/);
+});
+
+test('一般文字：民國時間正確排序及保留', () => {
+    const a = loadApp();
+    runParse(a, '定位請求時間: 115/11/16 11:00:00\n25.034, 121.566\n\n定位請求時間: 115/11/16 10:00:00\n25.033, 121.565');
+    eq(a.t.getData().towers.map(x => x.reqTime), ['115/11/16 10:00:00', '115/11/16 11:00:00']);
 });
