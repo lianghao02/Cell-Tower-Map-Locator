@@ -5,11 +5,11 @@
 - **Branch**：main
 - **Commit SHA**：基準 ba327e492468c1110e44dd1a4f1c860d2276cccd；本輪修正提交 SHA 以 Git HEAD 為準
 - **Skill Version**：v1.0.0
-- **Task Type**：FIX
+- **Task Type**：RELEASE
 - **Local Path Hint**：02_Cell-Tower-Map-Locator
 
 ## 目前狀態
-待驗證：本輪三項解析缺陷已修正並通過自動化驗證；瀏覽器實測未完成。
+v3.3.1 發布準備完成；已重新通過自動化測試並完成線上版主要流程實測。Release 與新版部署結果以 GitHub 紀錄及本輪交付回報為準。
 
 ## 本輪目標
 修正不同門號誤去重、民國年時間漏讀及缺少方位角卻計入可分析筆數的問題。
@@ -19,6 +19,8 @@
 - 新增測試先確認：不同門號同站同時被合併；不同民國時間被讀成空白後合併；null 被判斷為有效方位角。
 
 ## 已完成 (Completed)
+- 2026-11-17：更新 v3.3.1 介面／README／CHANGELOG；依使用者授權建立 annotated tag、Release 並核對 Pages 部署。
+- 本輪真瀏覽器已可操作；下列早期無法操作限制由本次驗收結果補充。
 - 入口回覆及一般文字去重均納入門號。
 - 請求、回應與註冊時間擷取支援民國／西元年份，沿用既有日期排序函式。
 - 方位角驗證排除空值、空白與非數字／文字型別，保留有效的 0 度。
@@ -33,7 +35,7 @@ js/app.js、js/parser.js、sw.js、tests/parser.test.js、HANDOFF.md。
 
 ## 尚未完成 (Remaining Work)
 - **P1 (阻斷/必須)**：本輪自動化驗證未發現未修正的阻斷問題。
-- **P2 (重要/當次)**：真瀏覽器貼上含兩個門號及民國時間的合成回覆，核對點位、歷史與分析提示。
+- **P2 (重要/當次)**：無新增阻斷；歷史、完整分析提示與裝置涵蓋仍可補驗收。
 - **P3 (改善建議/暫緩)**：既有交接的手機尺寸、舊 Safari／WebView、PWA 更新驗收仍未完成，不代表本輪已驗證。
 
 ## 驗證結果 (Validation)
@@ -43,8 +45,11 @@ js/app.js、js/parser.js、sw.js、tests/parser.test.js、HANDOFF.md。
 - node --check js/app.js、js/parser.js、js/geometry.js：通過。
 - Windows PowerShell scripts/qa.ps1：通過，含解析／幾何 34 項及差異／敏感值檢查。
 - 使用合成資料；未修改使用者來源資料。
+### 本次線上驗收
+- 正式站貼入兩筆合成門號及民國時間回覆，顯示軌跡資料 (2) 與兩筆正確時間，地圖顯示兩個標記。
+- 主控台錯誤／警告為 0。
 ### 尚未驗證項目
-Windows 瀏覽器工具無法可靠辨識 Chrome 目前網址，因此停止電腦操作；未完成畫面與真實瀏覽器互動驗收。
+手機各尺寸、舊 Safari／WebView、完整歷史互動與已安裝 PWA 更新未全面驗收。
 ### 已知風險 (Known Risks)
 Node 測試以 DOM／Leaflet 替身驗證控制流程，不涵蓋實際圖磚、觸控、CSS 與 PWA 更新。
 
@@ -55,7 +60,7 @@ Node 測試以 DOM／Leaflet 替身驗證控制流程，不涵蓋實際圖磚、
 - Branch：main。
 
 ## 下一步建議動作 (Next Recommended Action)
-完成本輪授權的提交與推送；後續補瀏覽器人工驗收，保留尚未驗證限制。
+完成本輪 Release／Pages 核對後停止擴大修改；保留已註明的未全面驗收項目。
 
 ## 發布狀態 (Release Status)
-待進一步實測；本輪僅提交與推送，未建立 Tag 或 Release，部署狀態另行核對。
+v3.3.1；版本發布與線上部署依本輪 GitHub 結果核對。未以線上測試冒充 file:// 或跨裝置驗收。
